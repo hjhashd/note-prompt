@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  note-prompt:
+    extends:
+      file: docker-compose.yml
+      service: note-prompt
+    environment:
+      - VITE_APP_ENV=staging
+      - PYTHON_API_URL=http://staging-python:8000
+      - JAVA_API_URL=http://staging-java:8080

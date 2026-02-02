@@ -1,0 +1,1643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员面板 - NotePrompt</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Monochromatic Blue Color Scheme */
+            --blue-50: #F0F7FF;
+            --blue-100: #E0EFFF;
+            --blue-200: #BAE0FF;
+            --blue-300: #7CC4FA;
+            --blue-400: #36A5F3;
+            --blue-500: #0B87E3;
+            --blue-600: #0068C9;
+            --blue-700: #0046A3;
+            --blue-800: #003378;
+            --blue-900: #001F52;
+
+            /* Teal/Turquoise Accent */
+            --teal-50: #F0FDFA;
+            --teal-100: #CCFBF1;
+            --teal-400: #2DD4BF;
+            --teal-500: #14B8A6;
+            --teal-600: #0D9488;
+
+            /* Neutral Colors */
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1E293B;
+            --gray-900: #0F172A;
+
+            /* Semantic Colors */
+            --success: #10B981;
+            --warning: #F59E0B;
+            --error: #EF4444;
+
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+            /* Border Radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --radius-full: 9999px;
+
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-normal: 200ms ease;
+            --transition-slow: 300ms ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--gray-300);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-400);
+        }
+
+        /* App Layout */
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: var(--white);
+            border-right: 1px solid var(--gray-200);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            overflow-y: auto;
+            transition: all var(--transition-normal);
+            z-index: 1000;
+        }
+
+        .sidebar.collapsed {
+            width: 60px;
+            padding: 20px 12px;
+        }
+
+        .sidebar.collapsed .brand-text,
+        .sidebar.collapsed .create-btn span,
+        .sidebar.collapsed .nav-link span,
+        .sidebar.collapsed .search-box,
+        .sidebar.collapsed .user-details,
+        .sidebar.collapsed .user-email {
+            display: none;
+        }
+
+        .sidebar.collapsed .brand {
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .sidebar.collapsed .create-btn {
+            justify-content: center;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+
+        .sidebar.collapsed .nav-link {
+            padding: 10px;
+            justify-content: center;
+        }
+
+        .sidebar.collapsed .user-info {
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .sidebar-toggle {
+            position: absolute;
+            top: 24px;
+            right: 12px;
+            background: var(--gray-100);
+            border: none;
+            border-radius: var(--radius-full);
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            color: var(--gray-600);
+        }
+
+        .sidebar-toggle:hover {
+            background: var(--gray-200);
+            color: var(--gray-800);
+        }
+
+        .sidebar.collapsed .sidebar-toggle {
+            right: 50%;
+            transform: translateX(50%);
+        }
+
+        .sidebar-header {
+            margin-bottom: 32px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 32px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+        }
+
+        .brand-text {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .create-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--white);
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 20px;
+        }
+
+        .create-btn:hover {
+            background: linear-gradient(135deg, var(--blue-600), var(--blue-700));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .sidebar-nav {
+            flex: 1;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-item {
+            margin-bottom: 4px;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: var(--radius-md);
+            color: var(--gray-700);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .nav-link:hover {
+            background: var(--gray-50);
+            color: var(--gray-900);
+        }
+
+        .nav-link.active {
+            background: var(--blue-50);
+            color: var(--blue-600);
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .search-container {
+            margin-top: auto;
+            margin-bottom: 24px;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px 10px 40px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            color: var(--gray-800);
+            transition: all var(--transition-normal);
+        }
+
+        .search-box input::placeholder {
+            color: var(--gray-400);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--blue-400);
+            background: var(--white);
+            box-shadow: 0 0 0 3px var(--blue-100);
+        }
+
+        .search-box svg {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+            width: 18px;
+            height: 18px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: var(--gray-50);
+            border-radius: var(--radius-md);
+            margin-top: auto;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--blue-400), var(--blue-600));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .user-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-800);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .user-email {
+            font-size: 12px;
+            color: var(--gray-500);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 260px;
+            padding: 32px;
+            min-height: 100vh;
+            transition: margin-left var(--transition-normal);
+        }
+
+        .sidebar.collapsed + .main-content {
+            margin-left: 60px;
+        }
+
+        /* Header */
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--gray-500);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-normal);
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .stat-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-500);
+        }
+
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+        }
+
+        .stat-icon.total {
+            background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+        }
+
+        .stat-icon.collections {
+            background: linear-gradient(135deg, var(--teal-500), var(--teal-600));
+        }
+
+        .stat-icon.likes {
+            background: linear-gradient(135deg, #F472B6, #EC4899);
+        }
+
+        .stat-icon.uses {
+            background: linear-gradient(135deg, var(--success), #059669);
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-change.positive {
+            color: var(--success);
+        }
+
+        .stat-change.negative {
+            color: var(--error);
+        }
+
+        /* Leaderboards Section */
+        .leaderboards-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 20px;
+        }
+
+        .leaderboards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 24px;
+        }
+
+        .leaderboard-card {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .leaderboard-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+            background: var(--gray-50);
+        }
+
+        .leaderboard-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .leaderboard-content {
+            padding: 20px;
+        }
+
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .leaderboard-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px;
+            border-radius: var(--radius-md);
+            transition: all var(--transition-fast);
+        }
+
+        .leaderboard-item:hover {
+            background: var(--gray-50);
+        }
+
+        .leaderboard-rank {
+            width: 24px;
+            height: 24px;
+            border-radius: var(--radius-full);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--white);
+        }
+
+        .leaderboard-rank.first {
+            background: #FFD700;
+        }
+
+        .leaderboard-rank.second {
+            background: #C0C0C0;
+        }
+
+        .leaderboard-rank.third {
+            background: #CD7F32;
+        }
+
+        .leaderboard-rank.other {
+            background: var(--gray-400);
+        }
+
+        .leaderboard-prompt {
+            flex: 1;
+        }
+
+        .leaderboard-prompt-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-800);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .leaderboard-prompt-meta {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .leaderboard-score {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        /* Trends Section */
+        .trends-section {
+            margin-bottom: 32px;
+        }
+
+        .trends-card {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 24px;
+        }
+
+        .trends-content {
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--gray-50);
+            border-radius: var(--radius-md);
+            margin-top: 20px;
+        }
+
+        .trends-placeholder {
+            text-align: center;
+            color: var(--gray-400);
+        }
+
+        /* Users Section */
+        .users-section {
+            margin-bottom: 32px;
+        }
+
+        .users-table {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+        }
+
+        .table-header {
+            background: var(--gray-50);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .table-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .table-content {
+            padding: 20px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-600);
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        td {
+            padding: 12px 16px;
+            font-size: 14px;
+            color: var(--gray-800);
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        tr:hover {
+            background: var(--gray-50);
+        }
+
+        /* Action Button */
+        .action-btn {
+            background: var(--blue-500);
+            color: var(--white);
+            border: none;
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .action-btn:hover {
+            background: var(--blue-600);
+        }
+
+        /* Graph Section */
+        .graph-section {
+            margin-bottom: 32px;
+        }
+
+        .graph-controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .user-selector,
+        .graph-type-selector {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-selector label,
+        .graph-type-selector label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .user-selector select,
+        .graph-type-selector select {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            color: var(--gray-800);
+            background: var(--white);
+        }
+
+        /* Graph Container */
+        .graph-container {
+            width: 100%;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            background: var(--white);
+            box-shadow: var(--shadow-md);
+            padding: 24px;
+            min-height: 500px;
+            overflow: hidden;
+        }
+
+        #relationshipGraph {
+            width: 100%;
+            height: 450px;
+            position: relative;
+        }
+
+        #relationshipGraph svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .graph-content {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .graph-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            background: var(--gray-50);
+            border-radius: var(--radius-md);
+            color: var(--gray-500);
+        }
+
+        /* SVG Graph Styles */
+        .node {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover {
+            filter: brightness(1.1);
+        }
+
+        .link {
+            stroke: var(--gray-300);
+            stroke-opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+
+        .link:hover {
+            stroke-opacity: 1;
+        }
+
+        .node-label {
+            font-size: 12px;
+            fill: var(--gray-700);
+            pointer-events: none;
+        }
+
+        /* Node Types */
+        .node-user {
+            fill: var(--blue-500);
+        }
+
+        .node-prompt {
+            fill: var(--teal-500);
+        }
+
+        .node-application {
+            fill: var(--success);
+        }
+
+        .node-like {
+            fill: #F472B6;
+        }
+
+        .node-favorite {
+            fill: var(--warning);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+
+            .sidebar.expanded {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .leaderboards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .leaderboards-grid > div {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5"></path>
+                            <path d="M2 12l10 5 10-5"></path>
+                        </svg>
+                    </div>
+                    <span class="brand-text">NotePrompt</span>
+                </div>
+                
+                <button class="create-btn" onclick="navigateTo('prompt_create.html')">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                    </svg>
+                    <span>新建提示词</span>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-item">
+                        <div class="nav-link" onclick="navigateTo('noteprompt_final.html')">
+                            <div class="nav-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <polyline points="10 9 9 9 8 9"></polyline>
+                                </svg>
+                            </div>
+                            <span>我的提示词</span>
+                        </div>
+                    </div>
+                    <div class="nav-item">
+                        <div class="nav-link" onclick="navigateTo('public_folders.html')">
+                            <div class="nav-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                            </div>
+                            <span>公共文件夹</span>
+                        </div>
+                    </div>
+                    <div class="nav-item">
+                        <div class="nav-link" onclick="navigateTo('my_collections.html')">
+                            <div class="nav-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                                </svg>
+                            </div>
+                            <span>我的收藏</span>
+                        </div>
+                    </div>
+                    <div class="nav-item">
+                        <div class="nav-link" onclick="navigateTo('my_stats.html')">
+                            <div class="nav-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                                </svg>
+                            </div>
+                            <span>我的导航</span>
+                        </div>
+                    </div>
+                    <div class="nav-item">
+                        <div class="nav-link active" onclick="navigateTo('admin_dashboard.html')">
+                            <div class="nav-icon">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                                    <path d="M2 17l10 5 10-5"></path>
+                                    <path d="M2 12l10 5 10-5"></path>
+                                </svg>
+                            </div>
+                            <span>管理员面板</span>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+            
+            <div class="search-container">
+                <div class="search-box">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" placeholder="搜索提示词...">
+                </div>
+            </div>
+            
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="user-name">管理员</div>
+                    <div class="user-email">admin@example.com</div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1 class="page-title">管理员面板</h1>
+                <p class="page-subtitle">汇总平台数据和用户活动</p>
+            </header>
+            
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">总提示词数</span>
+                        <div class="stat-icon total">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="stat-value">1,248</div>
+                    <div class="stat-change positive">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span>+12.5% 本月</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">总收藏数</span>
+                        <div class="stat-icon collections">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="stat-value">3,856</div>
+                    <div class="stat-change positive">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span>+8.3% 本月</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">总点赞数</span>
+                        <div class="stat-icon likes">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="stat-value">5,219</div>
+                    <div class="stat-change positive">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span>+15.7% 本月</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">总应用数</span>
+                        <div class="stat-icon uses">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="stat-value">8,742</div>
+                    <div class="stat-change positive">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <span>+22.1% 本月</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Leaderboards -->
+            <div class="leaderboards-section">
+                <h2 class="section-title">排行榜</h2>
+                <div class="leaderboards-grid">
+                    <!-- 收藏排行榜 -->
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-header">
+                            <h3 class="leaderboard-title">收藏排行榜</h3>
+                        </div>
+                        <div class="leaderboard-content">
+                            <div class="leaderboard-list">
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank first">1</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Midjourney 摄影风格提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: User123 · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">256</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank second">2</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">ChatGPT 代码优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Developer · 分类: 技术</div>
+                                    </div>
+                                    <div class="leaderboard-score">198</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank third">3</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">DALL-E 创意图像生成</div>
+                                        <div class="leaderboard-prompt-meta">用户: Artist · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">156</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">4</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">SEO 内容优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Marketer · 分类: 营销</div>
+                                    </div>
+                                    <div class="leaderboard-score">124</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">5</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">学术论文写作助手</div>
+                                        <div class="leaderboard-prompt-meta">用户: Student · 分类: 教育</div>
+                                    </div>
+                                    <div class="leaderboard-score">98</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 点赞排行榜 -->
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-header">
+                            <h3 class="leaderboard-title">点赞排行榜</h3>
+                        </div>
+                        <div class="leaderboard-content">
+                            <div class="leaderboard-list">
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank first">1</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Midjourney 摄影风格提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: User123 · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">324</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank second">2</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">ChatGPT 代码优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Developer · 分类: 技术</div>
+                                    </div>
+                                    <div class="leaderboard-score">256</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank third">3</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">DALL-E 创意图像生成</div>
+                                        <div class="leaderboard-prompt-meta">用户: Artist · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">212</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">4</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">SEO 内容优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Marketer · 分类: 营销</div>
+                                    </div>
+                                    <div class="leaderboard-score">189</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">5</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">学术论文写作助手</div>
+                                        <div class="leaderboard-prompt-meta">用户: Student · 分类: 教育</div>
+                                    </div>
+                                    <div class="leaderboard-score">145</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 应用排行榜 -->
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-header">
+                            <h3 class="leaderboard-title">应用排行榜</h3>
+                        </div>
+                        <div class="leaderboard-content">
+                            <div class="leaderboard-list">
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank first">1</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">ChatGPT 代码优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Developer · 分类: 技术</div>
+                                    </div>
+                                    <div class="leaderboard-score">523</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank second">2</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Midjourney 摄影风格提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: User123 · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">487</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank third">3</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">SEO 内容优化提示词</div>
+                                        <div class="leaderboard-prompt-meta">用户: Marketer · 分类: 营销</div>
+                                    </div>
+                                    <div class="leaderboard-score">398</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">4</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">DALL-E 创意图像生成</div>
+                                        <div class="leaderboard-prompt-meta">用户: Artist · 分类: 艺术</div>
+                                    </div>
+                                    <div class="leaderboard-score">345</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">5</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">学术论文写作助手</div>
+                                        <div class="leaderboard-prompt-meta">用户: Student · 分类: 教育</div>
+                                    </div>
+                                    <div class="leaderboard-score">289</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 用户贡献排行榜 -->
+                    <div class="leaderboard-card">
+                        <div class="leaderboard-header">
+                            <h3 class="leaderboard-title">用户贡献排行榜</h3>
+                        </div>
+                        <div class="leaderboard-content">
+                            <div class="leaderboard-list">
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank first">1</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">User123</div>
+                                        <div class="leaderboard-prompt-meta">提示词: 45 · 收藏: 120</div>
+                                    </div>
+                                    <div class="leaderboard-score">165</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank second">2</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Developer</div>
+                                        <div class="leaderboard-prompt-meta">提示词: 32 · 收藏: 98</div>
+                                    </div>
+                                    <div class="leaderboard-score">130</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank third">3</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Artist</div>
+                                        <div class="leaderboard-prompt-meta">提示词: 28 · 收藏: 87</div>
+                                    </div>
+                                    <div class="leaderboard-score">115</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">4</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Marketer</div>
+                                        <div class="leaderboard-prompt-meta">提示词: 22 · 收藏: 76</div>
+                                    </div>
+                                    <div class="leaderboard-score">98</div>
+                                </div>
+                                <div class="leaderboard-item">
+                                    <div class="leaderboard-rank other">5</div>
+                                    <div class="leaderboard-prompt">
+                                        <div class="leaderboard-prompt-title">Student</div>
+                                        <div class="leaderboard-prompt-meta">提示词: 18 · 收藏: 65</div>
+                                    </div>
+                                    <div class="leaderboard-score">83</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Trends Section -->
+            <div class="trends-section">
+                <h2 class="section-title">平台趋势</h2>
+                <div class="trends-card">
+                    <div class="trends-content">
+                        <div class="trends-placeholder">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom: 16px; opacity: 0.5;">
+                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                            </svg>
+                            <p>趋势图表将在此显示</p>
+                            <p style="font-size: 12px; margin-top: 8px;">包括提示词增长、用户活动等数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Users Section -->
+            <div class="users-section">
+                <h2 class="section-title">活跃用户</h2>
+                <div class="users-table">
+                    <div class="table-header">
+                        <h3 class="table-title">最近活跃用户</h3>
+                    </div>
+                    <div class="table-content">
+                        <div class="table-wrapper">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>用户</th>
+                                        <th>邮箱</th>
+                                        <th>注册日期</th>
+                                        <th>提示词数</th>
+                                        <th>收藏数</th>
+                                        <th>最近活动</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>User123</td>
+                                        <td>user123@example.com</td>
+                                        <td>2023-10-01</td>
+                                        <td>45</td>
+                                        <td>120</td>
+                                        <td>今天</td>
+                                        <td><button class="view-graph-btn" onclick="showUserGraph('User123')">查看关系图谱</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Developer</td>
+                                        <td>developer@example.com</td>
+                                        <td>2023-09-15</td>
+                                        <td>32</td>
+                                        <td>98</td>
+                                        <td>昨天</td>
+                                        <td><button class="view-graph-btn" onclick="showUserGraph('Developer')">查看关系图谱</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Artist</td>
+                                        <td>artist@example.com</td>
+                                        <td>2023-08-20</td>
+                                        <td>28</td>
+                                        <td>87</td>
+                                        <td>2天前</td>
+                                        <td><button class="view-graph-btn" onclick="showUserGraph('Artist')">查看关系图谱</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Marketer</td>
+                                        <td>marketer@example.com</td>
+                                        <td>2023-07-10</td>
+                                        <td>22</td>
+                                        <td>76</td>
+                                        <td>3天前</td>
+                                        <td><button class="view-graph-btn" onclick="showUserGraph('Marketer')">查看关系图谱</button></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Student</td>
+                                        <td>student@example.com</td>
+                                        <td>2023-06-05</td>
+                                        <td>18</td>
+                                        <td>65</td>
+                                        <td>5天前</td>
+                                        <td><button class="view-graph-btn" onclick="showUserGraph('Student')">查看关系图谱</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Relationship Graph Section -->
+            <div class="graph-section">
+                <h2 class="section-title">提示词关系图谱</h2>
+                <div class="graph-controls">
+                    <div class="user-selector">
+                        <label for="userSelect">选择用户:</label>
+                        <select id="userSelect" onchange="updateGraph(this.value)">
+                            <option value="">-- 请选择用户 --</option>
+                            <option value="User123">User123</option>
+                            <option value="Developer">Developer</option>
+                            <option value="Artist">Artist</option>
+                            <option value="Marketer">Marketer</option>
+                            <option value="Student">Student</option>
+                        </select>
+                    </div>
+                    <div class="graph-type-selector">
+                        <label for="graphType">图谱类型:</label>
+                        <select id="graphType" onchange="updateGraph(document.getElementById('userSelect').value)">
+                            <option value="all">所有关系</option>
+                            <option value="applied">应用关系</option>
+                            <option value="liked">点赞关系</option>
+                            <option value="favorited">收藏关系</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="graph-container">
+                    <div id="relationshipGraph" class="graph-content">
+                        <!-- Graph will be rendered here -->
+                        <div class="graph-placeholder">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom: 20px; opacity: 0.5;">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                            </svg>
+                            <p>请选择一个用户查看关系图谱</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+        });
+        
+        // Ensure sidebar is always expanded by default
+        sidebar.classList.remove('collapsed');
+        
+        // Navigation function
+        function navigateTo(page) {
+            window.location.href = page;
+            // Force sidebar collapse on mobile after navigation
+            if (window.innerWidth <= 768) {
+                sidebar.classList.remove('expanded');
+            }
+        }
+        
+        // Mobile sidebar toggle (if needed)
+        function toggleMobileSidebar() {
+            sidebar.classList.toggle('expanded');
+        }
+
+        // Relationship Graph Data
+        const graphData = {
+            "User123": {
+                prompts: [
+                    { id: "prompt1", title: "电商产品描述生成", applications: 5, likes: 3, favorites: 2 },
+                    { id: "prompt2", title: "社交媒体文案创作", applications: 8, likes: 6, favorites: 4 }
+                ],
+                relationships: [
+                    { source: "User123", target: "prompt1", type: "created" },
+                    { source: "User123", target: "prompt2", type: "created" },
+                    { source: "Developer", target: "prompt1", type: "applied" },
+                    { source: "Artist", target: "prompt1", type: "liked" },
+                    { source: "Marketer", target: "prompt1", type: "favorited" },
+                    { source: "Student", target: "prompt2", type: "applied" },
+                    { source: "Developer", target: "prompt2", type: "liked" },
+                    { source: "Artist", target: "prompt2", type: "favorited" }
+                ]
+            },
+            "Developer": {
+                prompts: [
+                    { id: "prompt3", title: "代码优化建议", applications: 12, likes: 8, favorites: 5 },
+                    { id: "prompt4", title: "API文档生成", applications: 6, likes: 4, favorites: 3 }
+                ],
+                relationships: [
+                    { source: "Developer", target: "prompt3", type: "created" },
+                    { source: "Developer", target: "prompt4", type: "created" },
+                    { source: "User123", target: "prompt3", type: "applied" },
+                    { source: "Artist", target: "prompt3", type: "liked" },
+                    { source: "Marketer", target: "prompt4", type: "applied" },
+                    { source: "Student", target: "prompt4", type: "favorited" }
+                ]
+            },
+            "Artist": {
+                prompts: [
+                    { id: "prompt5", title: "艺术风格转换", applications: 7, likes: 10, favorites: 6 },
+                    { id: "prompt6", title: "创意插画生成", applications: 9, likes: 12, favorites: 8 }
+                ],
+                relationships: [
+                    { source: "Artist", target: "prompt5", type: "created" },
+                    { source: "Artist", target: "prompt6", type: "created" },
+                    { source: "User123", target: "prompt5", type: "liked" },
+                    { source: "Developer", target: "prompt5", type: "applied" },
+                    { source: "Marketer", target: "prompt6", type: "liked" },
+                    { source: "Student", target: "prompt6", type: "favorited" }
+                ]
+            },
+            "Marketer": {
+                prompts: [
+                    { id: "prompt7", title: "营销活动策划", applications: 4, likes: 3, favorites: 2 }
+                ],
+                relationships: [
+                    { source: "Marketer", target: "prompt7", type: "created" },
+                    { source: "User123", target: "prompt7", type: "applied" },
+                    { source: "Artist", target: "prompt7", type: "liked" }
+                ]
+            },
+            "Student": {
+                prompts: [
+                    { id: "prompt8", title: "论文大纲生成", applications: 6, likes: 4, favorites: 3 }
+                ],
+                relationships: [
+                    { source: "Student", target: "prompt8", type: "created" },
+                    { source: "User123", target: "prompt8", type: "favorited" },
+                    { source: "Developer", target: "prompt8", type: "liked" }
+                ]
+            }
+        };
+
+        // Render Graph Function
+        function renderGraph(user, graphType) {
+            const container = document.getElementById('relationshipGraph');
+            container.innerHTML = '';
+
+            if (!user || !graphData[user]) {
+                container.innerHTML = `
+                    <div class="graph-placeholder">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="margin-bottom: 20px; opacity: 0.5;">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <p>请选择一个用户查看关系图谱</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const data = graphData[user];
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', '100%');
+            container.appendChild(svg);
+
+            // Prepare nodes and links
+            const nodes = [];
+            const links = [];
+
+            // Add user node
+            nodes.push({ id: user, type: 'user', label: user });
+
+            // Add prompt nodes
+            data.prompts.forEach(prompt => {
+                nodes.push({ id: prompt.id, type: 'prompt', label: prompt.title });
+                links.push({ source: user, target: prompt.id, type: 'created' });
+            });
+
+            // Add relationship nodes based on graph type
+            data.relationships.forEach(rel => {
+                if (rel.source !== user && (graphType === 'all' || 
+                    (graphType === 'applied' && rel.type === 'applied') ||
+                    (graphType === 'liked' && rel.type === 'liked') ||
+                    (graphType === 'favorited' && rel.type === 'favorited'))) {
+                    // Add source user if not already present
+                    if (!nodes.find(n => n.id === rel.source)) {
+                        nodes.push({ id: rel.source, type: 'user', label: rel.source });
+                    }
+                    links.push(rel);
+                }
+            });
+
+            // Simple force-directed layout
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            const centerX = width / 2;
+            const centerY = height / 2;
+
+            // Assign positions
+            nodes.forEach((node, index) => {
+                if (node.type === 'user' && node.id === user) {
+                    node.x = centerX;
+                    node.y = centerY;
+                } else if (node.type === 'prompt') {
+                    const angle = (index - 1) * (Math.PI * 2 / data.prompts.length);
+                    const radius = 100;
+                    node.x = centerX + Math.cos(angle) * radius;
+                    node.y = centerY + Math.sin(angle) * radius;
+                } else {
+                    // Other users
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = 180;
+                    node.x = centerX + Math.cos(angle) * radius;
+                    node.y = centerY + Math.sin(angle) * radius;
+                }
+            });
+
+            // Draw links
+            links.forEach(link => {
+                const sourceNode = nodes.find(n => n.id === link.source);
+                const targetNode = nodes.find(n => n.id === link.target);
+                if (sourceNode && targetNode) {
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', sourceNode.x);
+                    line.setAttribute('y1', sourceNode.y);
+                    line.setAttribute('x2', targetNode.x);
+                    line.setAttribute('y2', targetNode.y);
+                    line.setAttribute('class', 'link');
+                    svg.appendChild(line);
+                }
+            });
+
+            // Draw nodes
+            nodes.forEach(node => {
+                // Node circle
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', node.x);
+                circle.setAttribute('cy', node.y);
+                circle.setAttribute('r', node.type === 'user' ? 15 : 12);
+                circle.setAttribute('class', `node node-${node.type}`);
+                svg.appendChild(circle);
+
+                // Node label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', node.x);
+                text.setAttribute('y', node.y + 30);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('class', 'node-label');
+                text.textContent = node.label;
+                svg.appendChild(text);
+            });
+        }
+
+        // Update Graph Function
+        function updateGraph(user) {
+            const graphType = document.getElementById('graphType').value;
+            renderGraph(user, graphType);
+        }
+
+        // Show User Graph Function (for table buttons)
+        function showUserGraph(user) {
+            document.getElementById('userSelect').value = user;
+            updateGraph(user);
+        }
+
+        // Initialize event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const userSelect = document.getElementById('userSelect');
+            const graphType = document.getElementById('graphType');
+            
+            // Add event listeners
+            if (userSelect) {
+                userSelect.addEventListener('change', function() {
+                    updateGraph(this.value);
+                });
+            }
+            
+            if (graphType) {
+                graphType.addEventListener('change', function() {
+                    const user = document.getElementById('userSelect').value;
+                    if (user) {
+                        updateGraph(user);
+                    }
+                });
+            }
+
+            // Initialize graph with first user
+            if (userSelect && userSelect.options.length > 0) {
+                updateGraph(userSelect.value);
+            }
+        });
+    </script>
+</body>
+</html>

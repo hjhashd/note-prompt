@@ -1,0 +1,2241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的提示词 - NotePrompt</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Monochromatic Blue Color Scheme */
+            --blue-50: #F0F7FF;
+            --blue-100: #E0EFFF;
+            --blue-200: #BAE0FF;
+            --blue-300: #7CC4FA;
+            --blue-400: #36A5F3;
+            --blue-500: #0B87E3;
+            --blue-600: #0068C9;
+            --blue-700: #0046A3;
+            --blue-800: #003378;
+            --blue-900: #001F52;
+
+            /* Teal/Turquoise Accent */
+            --teal-50: #F0FDFA;
+            --teal-100: #CCFBF1;
+            --teal-400: #2DD4BF;
+            --teal-500: #14B8A6;
+            --teal-600: #0D9488;
+
+            /* Neutral Colors */
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1E293B;
+            --gray-900: #0F172A;
+
+            /* Semantic Colors */
+            --success: #10B981;
+            --warning: #F59E0B;
+            --error: #EF4444;
+
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+            /* Border Radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+            --radius-full: 9999px;
+
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-normal: 200ms ease;
+            --transition-slow: 300ms ease;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            height: 100vh;
+            overflow: hidden;
+            line-height: 1.6;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--gray-300);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--gray-400);
+        }
+
+        /* Layout */
+        .app-layout {
+            display: flex;
+            height: 100vh;
+            width: 100%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--white);
+            border-right: 1px solid var(--gray-200);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            overflow-y: auto;
+            transition: all var(--transition-normal);
+            z-index: 1000;
+        }
+
+        .sidebar.collapsed {
+            width: 60px;
+            padding: 20px 8px;
+        }
+
+        .sidebar-toggle {
+            position: absolute;
+            top: 24px;
+            right: -12px;
+            width: 24px;
+            height: 24px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--shadow-sm);
+            transition: all var(--transition-fast);
+            z-index: 1001;
+        }
+
+        .sidebar-toggle:hover {
+            background: var(--gray-50);
+            box-shadow: var(--shadow-md);
+        }
+
+        .sidebar.collapsed .sidebar-toggle svg {
+            transform: rotate(180deg);
+        }
+
+        .sidebar.collapsed .brand-text,
+        .sidebar.collapsed .nav-item span,
+        .sidebar.collapsed .create-btn span,
+        .sidebar.collapsed .search-container,
+        .sidebar.collapsed .user-details {
+            display: none;
+        }
+
+        .sidebar.collapsed .brand {
+            justify-content: center;
+        }
+
+        .sidebar.collapsed .create-btn {
+            justify-content: center;
+            padding: 10px;
+        }
+
+        .sidebar.collapsed .nav-link {
+            padding: 10px;
+            justify-content: center;
+        }
+
+        .sidebar.collapsed .user-info {
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .sidebar-header {
+            margin-bottom: 24px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .brand-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            box-shadow: var(--shadow-md);
+        }
+
+        .brand-text {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-900);
+            letter-spacing: -0.5px;
+        }
+
+        .create-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: linear-gradient(135deg, var(--blue-500), var(--blue-600));
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--white);
+            cursor: pointer;
+            transition: all var(--transition-normal);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 20px;
+        }
+
+        .create-btn:hover {
+            background: linear-gradient(135deg, var(--blue-600), var(--blue-700));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .search-container {
+            position: relative;
+            margin-top: auto;
+            margin-bottom: 24px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray-400);
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 14px 10px 42px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            color: var(--gray-800);
+            transition: all var(--transition-normal);
+        }
+
+        .search-input::placeholder {
+            color: var(--gray-400);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--blue-400);
+            background: var(--white);
+            box-shadow: 0 0 0 3px var(--blue-100);
+        }
+
+        .sidebar-nav {
+            flex: 1;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            margin-bottom: 4px;
+        }
+
+        .nav-item:hover {
+            background: var(--gray-50);
+            color: var(--gray-800);
+        }
+
+        .nav-item.active {
+            background: var(--blue-50);
+            color: var(--blue-600);
+        }
+
+        .nav-item svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: var(--gray-50);
+            border-radius: var(--radius-md);
+            margin-top: auto;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-details {
+            flex: 1;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .user-email {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            background: var(--gray-50);
+            min-height: 100vh;
+            transition: margin-left var(--transition-normal);
+        }
+
+        .sidebar.collapsed + .main-content {
+            margin-left: 60px;
+        }
+
+        .content-body {
+            flex: 1;
+            padding: 24px 32px;
+            overflow-y: auto;
+        }
+
+        .content-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px;
+            background: var(--white);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            margin-top: 0;
+            width: 100%;
+        }
+
+        /* Tag Directory Panel */
+        .tag-directory-panel {
+            width: 280px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            padding: 20px;
+            height: calc(100vh - 280px);
+            overflow-y: auto;
+        }
+
+        /* Directory Title */
+        .directory-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 15px 0;
+            color: var(--gray-800);
+        }
+
+        /* Tree Item Styles */
+        .tree-item {
+            margin-bottom: 8px;
+        }
+
+        .tree-item-header {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+
+        .tree-item-header:hover {
+            background: var(--gray-50);
+        }
+
+        .tree-icon {
+            font-size: 10px;
+            margin-right: 8px;
+            transition: transform 0.2s;
+            color: var(--gray-500);
+        }
+
+        .tree-item-header.open .tree-icon {
+            transform: rotate(90deg);
+        }
+
+        .tree-item-name {
+            font-size: 14px;
+            color: var(--gray-800);
+        }
+
+        .tree-item-children {
+            margin-left: 20px;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .tree-item-header.open + .tree-item-children {
+            display: block;
+        }
+
+        .tree-item-prompt {
+            padding: 6px 12px;
+            margin: 2px 0;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--gray-600);
+            transition: all 0.2s;
+        }
+
+        .tree-item-prompt:hover {
+            background: var(--gray-50);
+            color: var(--gray-900);
+        }
+
+        .tree-item-prompt.active {
+            background: var(--blue-50);
+            color: var(--blue-600);
+        }
+
+        /* Prompts Content */
+        .prompts-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* Search Container */
+        .search-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #888;
+            width: 16px;
+            height: 16px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 12px 10px 36px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .search-input::placeholder {
+            color: #888;
+        }
+
+        .search-input:focus {
+            border-color: rgba(100, 100, 255, 0.5);
+            box-shadow: 0 0 0 2px rgba(100, 100, 255, 0.1);
+        }
+
+        .page-header {
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #e0e0e0;
+            margin-bottom: 8px;
+        }
+
+        .page-desc {
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .filter-tab:hover {
+            border-color: var(--blue-300);
+            color: var(--blue-600);
+        }
+
+        .filter-tab.active {
+            background: var(--blue-500);
+            border-color: var(--blue-500);
+            color: var(--white);
+        }
+
+        /* Sort Bar */
+        .sort-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .sort-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sort-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-600);
+        }
+
+        .sort-select {
+            padding: 6px 12px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-700);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .sort-select:hover {
+            border-color: var(--blue-300);
+        }
+
+        .sort-select:focus {
+            outline: none;
+            border-color: var(--blue-400);
+            box-shadow: 0 0 0 3px var(--blue-100);
+        }
+
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .stats-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .stat-tag {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-600);
+        }
+
+        .stat-tag svg {
+            color: var(--blue-500);
+        }
+
+        /* Prompt Grid */
+        .prompt-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin-top: 24px;
+        }
+
+        .prompt-card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: all var(--transition-normal);
+            cursor: pointer;
+        }
+
+        .prompt-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--blue-300);
+        }
+
+        .prompt-cover {
+            height: 120px;
+            background: linear-gradient(135deg, var(--blue-50), var(--blue-100));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .prompt-cover::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255, 255, 255, 0.3) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0.3) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+            opacity: 0.5;
+        }
+
+        .prompt-icon {
+            width: 60px;
+            height: 60px;
+            background: var(--white);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--blue-500);
+            box-shadow: var(--shadow-md);
+            position: relative;
+            z-index: 1;
+        }
+
+        .prompt-icon svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        .prompt-content {
+            padding: 20px;
+        }
+
+        .prompt-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .prompt-desc {
+            font-size: 14px;
+            color: var(--gray-600);
+            margin-bottom: 12px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .prompt-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .prompt-tag {
+            padding: 4px 10px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--gray-600);
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .prompt-tag:hover {
+            background: var(--blue-50);
+            border-color: var(--blue-200);
+            color: var(--blue-600);
+        }
+
+        .tag-remove {
+            margin-left: 6px;
+            background: none;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            color: var(--gray-400);
+            padding: 0 4px;
+            border-radius: 50%;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+
+        .tag-remove:hover {
+            background: var(--red-50);
+            color: var(--red-500);
+        }
+
+        .tag-add {
+            padding: 4px 10px;
+            background: var(--gray-50);
+            border: 1px dashed var(--gray-300);
+            border-radius: var(--radius-full);
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tag-add:hover {
+            background: var(--blue-50);
+            border-color: var(--blue-300);
+            color: var(--blue-600);
+        }
+
+        .prompt-meta {
+            display: flex;
+            flex-direction: column;
+            padding-top: 12px;
+            border-top: 1px solid var(--gray-100);
+            gap: 8px;
+        }
+
+        .prompt-meta-top {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .prompt-date {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .prompt-owner {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-right: auto;
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+        }
+
+        .prompt-owner svg {
+            width: 14px;
+            height: 14px;
+            color: var(--gray-400);
+        }
+
+        .prompt-stats {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .prompt-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .prompt-stat svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--white);
+            border: 2px dashed var(--gray-200);
+            border-radius: var(--radius-lg);
+            grid-column: 1 / -1;
+        }
+
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            color: var(--gray-300);
+            margin-bottom: 20px;
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+            color: var(--gray-500);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn var(--transition-fast);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal {
+            background: var(--white);
+            border-radius: var(--radius-xl);
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            animation: slideUp var(--transition-normal);
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--gray-100);
+            border: none;
+            border-radius: var(--radius-md);
+            color: var(--gray-500);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .modal-close:hover {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .modal-body {
+            padding: 24px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: 8px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            color: var(--gray-800);
+            transition: all var(--transition-normal);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--blue-400);
+            background: var(--white);
+            box-shadow: 0 0 0 3px var(--blue-100);
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            color: var(--gray-800);
+            min-height: 120px;
+            resize: vertical;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all var(--transition-normal);
+        }
+
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--blue-400);
+            background: var(--white);
+            box-shadow: 0 0 0 3px var(--blue-100);
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-fast);
+        }
+
+        .btn-secondary {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            color: var(--gray-700);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-300);
+        }
+
+        .btn-primary {
+            background: var(--blue-500);
+            border: none;
+            color: var(--white);
+        }
+
+        .btn-primary:hover {
+            background: var(--blue-600);
+        }
+
+        /* Tree-like Tag Directory Styling */
+        .tag-directory {
+            margin-top: 24px;
+            padding: 16px;
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--gray-200);
+        }
+
+        .directory-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .tree-item {
+            margin-bottom: 8px;
+        }
+
+        .tree-item-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .tree-item-header:hover {
+            background: var(--gray-50);
+            color: var(--gray-900);
+        }
+
+        .tree-icon {
+            flex-shrink: 0;
+            transition: transform 0.2s ease;
+        }
+
+        .tree-icon.rotated {
+            transform: rotate(90deg);
+        }
+
+        .tree-item-name {
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .tree-item-children {
+            margin-left: 20px;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .tree-item-children.collapsed {
+            display: none;
+        }
+
+        .tree-item-prompt {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .tree-item-prompt:hover {
+            background: var(--gray-50);
+            color: var(--gray-800);
+        }
+
+        .tree-item-prompt.active {
+            background: var(--blue-50);
+            color: var(--blue-600);
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 240px;
+            }
+
+            .content-body {
+                padding: 16px;
+            }
+
+            .filter-bar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .action-bar {
+                flex-direction: column;
+                gap: 16px;
+                align-items: flex-start;
+            }
+
+            .prompt-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .sidebar {
+                width: 200px;
+            }
+
+            .brand-text {
+                font-size: 16px;
+            }
+
+            .nav-item span {
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+
+        
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-toggle" onclick="toggleSidebar()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </div>
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="brand-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <span class="brand-text">NotePrompt</span>
+                </div>
+                <button class="create-btn" onclick="showPromptOptimus()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    <span>新建提示词</span>
+                </button>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-item active" onclick="navigateTo('noteprompt_final.html')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <span>我的提示词</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('public_folders.html')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>公共文件夹</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('my_collections.html')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                    <span>我的收藏</span>
+                </div>
+                <div class="nav-item" onclick="navigateTo('my_stats.html')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="20" x2="18" y2="10"/>
+                        <line x1="12" y1="20" x2="12" y2="4"/>
+                        <line x1="6" y1="20" x2="6" y2="14"/>
+                    </svg>
+                    <span>个人中心</span>
+                </div>
+                <div class="nav-item">
+                    <div class="nav-link" onclick="navigateTo('admin_dashboard.html')">
+                        <div class="nav-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                                <path d="M2 17l10 5 10-5"></path>
+                                <path d="M2 12l10 5 10-5"></path>
+                            </svg>
+                        </div>
+                        <span>管理员面板</span>
+                    </div>
+                </div>
+            </nav>
+            
+            <div class="user-info">
+                <div class="user-avatar">U</div>
+                <div class="user-details">
+                    <div class="user-name">用户</div>
+                    <div class="user-email">user@example.com</div>
+                </div>
+            </div>
+        </aside>
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-body">
+                <div class="content-inner">
+                    <div class="main-layout">
+                        <!-- Left Side: Tag Directory -->
+                        <div class="tag-directory-panel">
+                            <div class="search-container">
+                                <div class="search-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                    </svg>
+                                </div>
+                                <input type="text" class="search-input" placeholder="搜索提示词..." id="searchInput" oninput="handleSearch()">
+                            </div>
+                            
+                            <!-- Tag Directory -->
+                            <div class="tag-directory">
+                                <div class="directory-title">标签目录</div>
+                                <div class="tree-item">
+                                    <div class="tree-item-header" onclick="toggleTreeItem(this)">
+                                        <span class="tree-icon">▶</span>
+                                        <span class="tree-item-name">全部部门</span>
+                                    </div>
+                                    <div class="tree-item-children">
+                                        <div class="tree-item-prompt active" onclick="filterCategory('all', this)">全部</div>
+                                    </div>
+                                </div>
+                                <div class="tree-item">
+                                    <div class="tree-item-header" onclick="toggleTreeItem(this)">
+                                        <span class="tree-icon">▶</span>
+                                        <span class="tree-item-name">技术部门</span>
+                                    </div>
+                                    <div class="tree-item-children">
+                                        <div class="tree-item-prompt" onclick="filterCategory('coding', this)">编程开发</div>
+                                        <div class="tree-item-prompt" onclick="filterCategory('analysis', this)">数据分析</div>
+                                    </div>
+                                </div>
+                                <div class="tree-item">
+                                    <div class="tree-item-header" onclick="toggleTreeItem(this)">
+                                        <span class="tree-icon">▶</span>
+                                        <span class="tree-item-name">创意部门</span>
+                                    </div>
+                                    <div class="tree-item-children">
+                                        <div class="tree-item-prompt" onclick="filterCategory('writing', this)">协作创作</div>
+                                        <div class="tree-item-prompt" onclick="filterCategory('design', this)">设计创意</div>
+                                    </div>
+                                </div>
+                                <div class="tree-item">
+                                    <div class="tree-item-header" onclick="toggleTreeItem(this)">
+                                        <span class="tree-icon">▶</span>
+                                        <span class="tree-item-name">商务部门</span>
+                                    </div>
+                                    <div class="tree-item-children">
+                                        <div class="tree-item-prompt" onclick="filterCategory('business', this)">商业办公</div>
+                                        <div class="tree-item-prompt" onclick="filterCategory('marketing', this)">市场营销</div>
+                                    </div>
+                                </div>
+                                <div class="tree-item">
+                                    <div class="tree-item-header" onclick="toggleTreeItem(this)">
+                                        <span class="tree-icon">▶</span>
+                                        <span class="tree-item-name">教育部门</span>
+                                    </div>
+                                    <div class="tree-item-children">
+                                        <div class="tree-item-prompt" onclick="filterCategory('education', this)">教育教学</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Side: Prompts Content -->
+                        <div class="prompts-content">
+                            <!-- Action Bar -->
+                            <div class="action-bar">
+                                <div class="stats-info">
+                                    <span class="stat-tag">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                            <polyline points="14 2 14 8 20 8"/>
+                                        </svg>
+                                        共 <span id="totalCount">0</span> 个提示词
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="search-container">
+                                <div class="search-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                    </svg>
+                                </div>
+                                <input type="text" class="search-input" placeholder="搜索提示词..." id="searchInput" oninput="handleSearch()">
+                            </div>
+   
+                            <div class="filter-tabs">
+                                <button class="filter-tab active" onclick="filterCategory('all', this)">全部</button>
+                                <button class="filter-tab" onclick="filterCategory('coding', this)">编程开发</button>
+                                <button class="filter-tab" onclick="filterCategory('writing', this)">写作创作</button>
+                                <button class="filter-tab" onclick="filterCategory('business', this)">商业办公</button>
+                                <button class="filter-tab" onclick="filterCategory('analysis', this)">数据分析</button>
+                                <button class="filter-tab" onclick="filterCategory('education', this)">教育培训</button>
+                            </div>
+
+                            <!-- Sort Bar -->
+                            <div class="sort-bar">
+                                <div class="sort-box">
+                                    <span class="sort-label">排序方式</span>
+                                    <select class="sort-select" id="sortSelect" onchange="handleSort()">
+                                        <option value="recent">最近编辑</option>
+                                        <option value="created">创建时间</option>
+                                        <option value="name">名称排序</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Prompt Grid -->
+                            <div class="prompt-grid" id="promptGrid">
+                                <!-- Prompt cards will be rendered here -->
+                            </div>
+                        </div>
+
+                        <!-- Prompt Optimus Embedded Container -->
+                        <div id="promptOptimusContainer" style="display: none; width: 100%; height: 80vh; border: none; border-radius: var(--radius-lg); overflow: hidden;">
+                            <iframe src="prompt_optimus.html" style="width: 100%; height: 100%; border: none;"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Save Modal -->
+    <div class="modal-overlay" id="saveModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">保存提示词</h2>
+                <button class="modal-close" onclick="closeSaveModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">提示词标题</label>
+                    <input type="text" class="form-input" id="promptTitle" placeholder="输入提示词标题">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">提示词内容</label>
+                    <textarea class="form-textarea" id="promptContent" placeholder="输入你的提示词内容..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">标签（用逗号分隔）</label>
+                    <input type="text" class="form-input" id="promptTags" placeholder="例如：编程,Python,代码审查">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSaveModal()">取消</button>
+                <button class="btn btn-primary" onclick="savePrompt()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tree item toggle functionality
+        function toggleTreeItem(element) {
+            const icon = element.querySelector('.tree-icon');
+            const children = element.nextElementSibling;
+            
+            if (children) {
+                children.classList.toggle('collapsed');
+                icon.classList.toggle('rotated');
+            }
+        }
+
+        // Update filterCategory function to handle tree item selection
+        function filterCategory(category, element) {
+            // Remove active class from all filter tabs
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remove active class from all tree item prompts
+            document.querySelectorAll('.tree-item-prompt').forEach(item => {
+                item.classList.remove('active');
+            });
+            
+            // Add active class to the clicked element
+            element.classList.add('active');
+            
+            // Filter prompts by category
+            const promptCards = document.querySelectorAll('.prompt-card');
+            let count = 0;
+            
+            promptCards.forEach(card => {
+                if (category === 'all' || card.dataset.category === category) {
+                    card.style.display = 'block';
+                    count++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            // Update total count
+            document.getElementById('totalCount').textContent = count;
+        }
+
+        // Prompt Optimus Embedding Functions
+        function showPromptOptimus() {
+            document.getElementById('promptGrid').style.display = 'none';
+            document.getElementById('promptOptimusContainer').style.display = 'block';
+        }
+
+        function hidePromptOptimus() {
+            document.getElementById('promptOptimusContainer').style.display = 'none';
+            document.getElementById('promptGrid').style.display = 'grid';
+        }
+
+        // Sample data for my prompts
+        const myPrompts = [
+            {
+                id: '1',
+                title: 'Python 代码审查助手',
+                description: '帮助审查和优化 Python 代码，提供最佳实践建议',
+                category: 'coding',
+                tags: ['Python', '代码审查', '优化'],
+                updatedAt: '2024-01-15',
+                likes: 12,
+                uses: 45,
+                owner: '用户'
+            },
+            {
+                id: '2',
+                title: '博客文章生成器',
+                description: '根据主题自动生成结构化的博客文章初稿',
+                category: 'writing',
+                tags: ['写作', '内容生成', '博客'],
+                updatedAt: '2024-01-14',
+                likes: 28,
+                uses: 89,
+                owner: '用户'
+            },
+            {
+                id: '3',
+                title: '数据分析报告模板',
+                description: '快速生成专业的数据分析报告，包括图表建议',
+                category: 'analysis',
+                tags: ['数据分析', '报告', '可视化'],
+                updatedAt: '2024-01-12',
+                likes: 15,
+                uses: 34,
+                owner: '用户'
+            },
+            {
+                id: '4',
+                title: '商业计划书框架',
+                description: '帮助撰写专业的商业计划书和融资材料',
+                category: 'business',
+                tags: ['商业', '计划书', '融资'],
+                updatedAt: '2024-01-10',
+                likes: 22,
+                uses: 56,
+                owner: '用户'
+            },
+            {
+                id: '5',
+                title: '教案设计助手',
+                description: '根据教学目标自动生成完整的教案设计',
+                category: 'education',
+                tags: ['教育', '教案', '教学设计'],
+                updatedAt: '2024-01-08',
+                likes: 18,
+                favorites: 12,
+                uses: 42,
+                owner: '用户'
+            },
+            {
+                id: '6',
+                title: 'SQL 查询优化器',
+                description: '分析和优化 SQL 查询语句，提升数据库性能',
+                category: 'coding',
+                tags: ['SQL', '数据库', '性能优化'],
+                updatedAt: '2024-01-05',
+                likes: 9,
+                favorites: 5,
+                uses: 27,
+                owner: '用户'
+            }
+        ];
+
+        // State
+        let prompts = JSON.parse(localStorage.getItem('prompts')) || [...myPrompts];
+        let currentCategory = 'all';
+        let currentSort = 'recent';
+        let searchQuery = '';
+        let editingId = null;
+
+        // Sidebar toggle functionality
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('collapsed');
+        }
+
+        // Navigation
+        function navigateTo(url) {
+            // Navigate to URL
+            window.location.href = url;
+        }
+
+        // Prompt Optimus Embedding Functions
+        function showPromptOptimus() {
+            document.getElementById('promptGrid').style.display = 'none';
+            document.getElementById('promptOptimusContainer').style.display = 'block';
+        }
+
+        function hidePromptOptimus() {
+            document.getElementById('promptOptimusContainer').style.display = 'none';
+            document.getElementById('promptGrid').style.display = 'grid';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            renderPrompts();
+            updateTotalCount();
+        });
+
+        // Render prompt cards
+        function renderPrompts() {
+            const grid = document.getElementById('promptGrid');
+            let filteredPrompts = [...prompts];
+
+            // Filter by category
+            if (currentCategory !== 'all') {
+                filteredPrompts = filteredPrompts.filter(p => p.category === currentCategory);
+            }
+
+            // Filter by search
+            if (searchQuery) {
+                filteredPrompts = filteredPrompts.filter(p => 
+                    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()))
+                );
+            }
+
+            // Sort
+            filteredPrompts.sort((a, b) => {
+                switch (currentSort) {
+                    case 'recent':
+                        return new Date(b.updatedAt) - new Date(a.updatedAt);
+                    case 'created':
+                        return b.id - a.id;
+                    case 'name':
+                        return a.title.localeCompare(b.title, 'zh-CN');
+                    default:
+                        return 0;
+                }
+            });
+
+            if (filteredPrompts.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="12" y1="18" x2="12" y2="12"/>
+                            <line x1="9" y1="15" x2="15" y2="15"/>
+                        </svg>
+                        <h3>暂无提示词</h3>
+                        <p>点击左侧按钮创建你的第一个提示词</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = filteredPrompts.map(prompt => `
+                <div class="prompt-card">
+                    <div class="prompt-cover">
+                        <div class="prompt-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10 9 9 9 8 9"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="prompt-content">
+                        <h3 class="prompt-title">${prompt.title}</h3>
+                        <p class="prompt-desc">${prompt.description}</p>
+                        <div class="prompt-tags">
+                            ${prompt.tags.map(tag => `
+                                <span class="prompt-tag">
+                                    ${tag}
+                                </span>
+                            `).join('')}
+                        </div>
+                        <div class="prompt-meta">
+                            <div class="prompt-meta-top">
+                                <span class="prompt-date">更新于 ${prompt.updatedAt}</span>
+                                <span class="prompt-owner">所属人：${prompt.owner}</span>
+                            </div>
+                            <div class="prompt-stats">
+                                <div class="prompt-stat" onclick="toggleLike('${prompt.id}', event)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                                    </svg>
+                                    ${prompt.likes}
+                                </div>
+                                <div class="prompt-stat" onclick="toggleFavorite('${prompt.id}', event)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                                    </svg>
+                                    ${prompt.favorites || 0}
+                                </div>
+                                <div class="prompt-stat" onclick="applyToReport('${prompt.id}', event)" title="应用到报告">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                        <polyline points="17 21 17 13 7 13 7 21"/>
+                                        <polyline points="7 3 7 8 15 8"/>
+                                    </svg>
+                                </div>
+                                <div class="prompt-stat" onclick="copyPrompt('${prompt.id}', event)" title="复制">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                </div>
+                                <div class="prompt-stat" onclick="editPrompt('${prompt.id}', event)" title="复用">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                </div>
+                                <div class="prompt-stat" onclick="showCardDetail('${prompt.id}', event)" title="浏览">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                                        <circle cx="12" cy="12" r="3"/>
+                                    </svg>
+                                    ${prompt.views || 0}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Update total count
+        function updateTotalCount() {
+            document.getElementById('totalCount').textContent = prompts.length;
+        }
+
+        // Filter by category
+        function filterCategory(category, btn) {
+            currentCategory = category;
+            // Remove active class from all filter tabs
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // Remove active class from all tree item prompts
+            document.querySelectorAll('.tree-item-prompt').forEach(item => {
+                item.classList.remove('active');
+            });
+            // Add active class to the clicked element
+            btn.classList.add('active');
+            renderPrompts();
+        }
+
+        // Handle search
+        function handleSearch() {
+            searchQuery = document.getElementById('searchInput').value;
+            renderPrompts();
+        }
+
+        // Handle sort
+        function handleSort() {
+            currentSort = document.getElementById('sortSelect').value;
+            renderPrompts();
+        }
+
+        // Handle like
+        function toggleLike(id, event) {
+            event.stopPropagation();
+            const index = prompts.findIndex(p => p.id === id);
+            if (index !== -1) {
+                prompts[index].likes = (prompts[index].likes || 0) + 1;
+                renderPrompts();
+            }
+        }
+
+        // Handle favorite
+        function toggleFavorite(id, event) {
+            event.stopPropagation();
+            const index = prompts.findIndex(p => p.id === id);
+            if (index !== -1) {
+                prompts[index].favorites = (prompts[index].favorites || 0) + 1;
+                renderPrompts();
+            }
+        }
+
+        // Handle copy prompt
+        function copyPrompt(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Copy prompt content to clipboard
+                const copyText = `${prompt.title}\n\n${prompt.description}\n\n标签: ${prompt.tags.join(', ')}`;
+                navigator.clipboard.writeText(copyText).then(() => {
+                    // Show success message
+                    showToast('复制成功！');
+                }).catch(err => {
+                    console.error('复制失败:', err);
+                    showToast('复制失败，请重试');
+                });
+            }
+        }
+
+        // Show toast notification
+        function showToast(message) {
+            // Create toast element if it doesn't exist
+            let toast = document.getElementById('toast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toast';
+                toast.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: rgba(16, 185, 129, 0.9);
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 6px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                    z-index: 10000;
+                    font-size: 14px;
+                    font-weight: 500;
+                    transform: translateX(100%);
+                    transition: transform 0.3s ease;
+                `;
+                document.body.appendChild(toast);
+            }
+
+            // Set message and show toast
+            toast.textContent = message;
+            toast.style.transform = 'translateX(0)';
+
+            // Hide toast after 2 seconds
+            setTimeout(() => {
+                toast.style.transform = 'translateX(100%)';
+            }, 2000);
+        }
+
+        // Handle apply to report
+        function applyToReport(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Increment uses count
+                prompt.uses = (prompt.uses || 0) + 1;
+                renderPrompts();
+                // Show success message
+                showToast('已应用到报告');
+            }
+        }
+
+        // Handle copy prompt
+        function copyPrompt(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Copy prompt content to clipboard
+                const copyText = `${prompt.title}\n\n${prompt.description}\n\n标签: ${prompt.tags.join(', ')}`;
+                navigator.clipboard.writeText(copyText).then(() => {
+                    // Show success message
+                    showToast('复制成功！');
+                }).catch(err => {
+                    console.error('复制失败:', err);
+                    showToast('复制失败，请重试');
+                });
+            }
+        }
+
+        // Modal functions
+        function openSaveModal() {
+            editingId = null;
+            document.getElementById('promptTitle').value = '';
+            document.getElementById('promptContent').value = '';
+            document.getElementById('promptTags').value = '';
+            document.querySelector('.modal-title').textContent = '保存提示词';
+            document.getElementById('saveModal').classList.add('active');
+        }
+
+        function closeSaveModal() {
+            document.getElementById('saveModal').classList.remove('active');
+        }
+
+        function editPrompt(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Encode prompt data for URL
+                const promptData = encodeURIComponent(JSON.stringify(prompt));
+                // Redirect to prompt_optimus.html with prompt data
+                window.location.href = `prompt_optimus.html?prompt=${promptData}`;
+            }
+        }
+
+        function savePrompt() {
+            const title = document.getElementById('promptTitle').value.trim();
+            const content = document.getElementById('promptContent').value.trim();
+            const tagsInput = document.getElementById('promptTags').value.trim();
+            const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag) : ['新创建'];
+            
+            if (!title) {
+                alert('请输入提示词标题');
+                return;
+            }
+
+            if (editingId) {
+                // Edit existing
+                const index = prompts.findIndex(p => p.id === editingId);
+                if (index !== -1) {
+                    prompts[index] = {
+                        ...prompts[index],
+                        title: title,
+                        description: content || '无描述',
+                        tags: tags,
+                        updatedAt: new Date().toISOString().split('T')[0]
+                    };
+                }
+            } else {
+                // Add new
+                const newPrompt = {
+                    id: String(prompts.length + 1),
+                    title: title,
+                    description: content || '无描述',
+                    category: 'coding',
+                    tags: tags,
+                    updatedAt: new Date().toISOString().split('T')[0],
+                    likes: 0,
+                    favorites: 0,
+                    uses: 0,
+                    views: 0
+                };
+                prompts.unshift(newPrompt);
+            }
+
+            closeSaveModal();
+            renderPrompts();
+            updateTotalCount();
+        }
+        
+
+
+        // Close modal on overlay click
+        document.getElementById('saveModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeSaveModal();
+            }
+        });
+
+        // Show card detail modal
+        function showCardDetail(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Increase view count
+                prompt.views = (prompt.views || 0) + 1;
+                
+                document.getElementById('modalTitle').textContent = prompt.title;
+                document.getElementById('modalDescription').textContent = prompt.description;
+                document.getElementById('modalDate').textContent = `更新于 ${prompt.updatedAt}`;
+                document.getElementById('modalLikes').textContent = `点赞: ${prompt.likes || 0}`;
+                document.getElementById('modalFavorites').textContent = `收藏: ${prompt.favorites || 0}`;
+                document.getElementById('modalViews').textContent = `浏览: ${prompt.views || 0}`;
+                document.getElementById('modalUses').textContent = `使用: ${prompt.uses || 0}`;
+                
+                // Render tags
+                const tagsContainer = document.getElementById('modalTags');
+                tagsContainer.innerHTML = prompt.tags.map(tag => `
+                    <span class="prompt-tag" style="
+                        padding: 4px 12px;
+                        background: var(--gray-50);
+                        border: 1px solid var(--gray-200);
+                        border-radius: var(--radius-full);
+                        font-size: 12px;
+                        font-weight: 500;
+                        color: var(--gray-600);
+                        margin-right: 8px;
+                        margin-bottom: 8px;
+                        display: inline-block;
+                    ">${tag}</span>
+                `).join('');
+                
+                // Show modal
+                const modal = document.getElementById('cardDetailModal');
+                modal.style.display = 'flex';
+            }
+        }
+
+        // Close card detail modal
+        function closeCardDetailModal() {
+            document.getElementById('cardDetailModal').style.display = 'none';
+        }
+
+        // Close modal on overlay click
+        document.getElementById('cardDetailModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeCardDetailModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeSaveModal();
+                closeCardDetailModal();
+            }
+        });
+    </script>
+
+    <!-- Card detail modal -->
+    <div id="cardDetailModal" class="modal" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    ">
+        <div class="modal-content" style="
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            margin: 20px;
+            box-shadow: var(--shadow-xl);
+        ">
+            <div class="modal-header" style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--gray-200);
+            ">
+                <h2 id="modalTitle" class="modal-title" style="
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: var(--gray-900);
+                "></h2>
+                <button onclick="closeCardDetailModal()" style="
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    color: var(--gray-500);
+                    padding: 4px;
+                    border-radius: var(--radius-sm);
+                    transition: all 0.2s ease;
+                " onmouseover="this.style.background='var(--gray-100)'; this.style.color='var(--gray-700)'" onmouseout="this.style.background='none'; this.style.color='var(--gray-500)'">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body" style="
+                margin-bottom: 24px;
+            ">
+                <div id="modalDescription" style="
+                    font-size: 14px;
+                    line-height: 1.6;
+                    color: var(--gray-700);
+                    margin-bottom: 24px;
+                "></div>
+                <div id="modalTags" style="
+                    margin-bottom: 24px;
+                "></div>
+                <div style="
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                    gap: 16px;
+                    padding: 16px;
+                    background: var(--gray-50);
+                    border-radius: var(--radius-md);
+                ">
+                    <div id="modalDate" style="
+                        font-size: 13px;
+                        color: var(--gray-500);
+                    "></div>
+                    <div id="modalLikes" style="
+                        font-size: 13px;
+                        color: var(--gray-500);
+                    "></div>
+                    <div id="modalFavorites" style="
+                        font-size: 13px;
+                        color: var(--gray-500);
+                    "></div>
+                    <div id="modalViews" style="
+                        font-size: 13px;
+                        color: var(--gray-500);
+                    "></div>
+                    <div id="modalUses" style="
+                        font-size: 13px;
+                        color: var(--gray-500);
+                    "></div>
+                </div>
+            </div>
+            <div class="modal-footer" style="
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                padding-top: 16px;
+                border-top: 1px solid var(--gray-200);
+            ">
+                <button onclick="closeCardDetailModal()" style="
+                    padding: 8px 16px;
+                    background: white;
+                    border: 1px solid var(--gray-300);
+                    border-radius: var(--radius-md);
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: var(--gray-700);
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                " onmouseover="this.style.background='var(--gray-50)'; this.style.borderColor='var(--gray-400)'" onmouseout="this.style.background='white'; this.style.borderColor='var(--gray-300)'">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+        // Close modal on overlay click
+        document.getElementById('saveModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeSaveModal();
+            }
+        });
+
+        // Show card detail modal
+        function showCardDetail(id, event) {
+            event.stopPropagation();
+            const prompt = prompts.find(p => p.id === id);
+            if (prompt) {
+                // Increase view count
+                prompt.views = (prompt.views || 0) + 1;
+                
+                document.getElementById('modalTitle').textContent = prompt.title;
+                document.getElementById('modalDescription').textContent = prompt.description;
+                document.getElementById('modalDate').textContent = `更新于 ${prompt.updatedAt}`;
+                document.getElementById('modalLikes').textContent = `点赞: ${prompt.likes || 0}`;
+                document.getElementById('modalFavorites').textContent = `收藏: ${prompt.favorites || 0}`;
+                document.getElementById('modalViews').textContent = `浏览: ${prompt.views || 0}`;
+                document.getElementById('modalUses').textContent = `使用: ${prompt.uses || 0}`;
+                
+                // Render tags
+                const tagsContainer = document.getElementById('modalTags');
+                tagsContainer.innerHTML = prompt.tags.map(tag => `
+                    <span class="prompt-tag" style="
+                        padding: 4px 12px;
+                        background: var(--gray-50);
+                        border: 1px solid var(--gray-200);
+                        border-radius: var(--radius-full);
+                        font-size: 12px;
+                        font-weight: 500;
+                        color: var(--gray-600);
+                        margin-right: 8px;
+                        margin-bottom: 8px;
+                        display: inline-block;
+                    ">${tag}</span>
+                `).join('');
+                
+                // Show modal
+                const modal = document.getElementById('cardDetailModal');
+                modal.style.display = 'flex';
+            }
+        }
+
+        // Close card detail modal
+        function closeCardDetailModal() {
+            document.getElementById('cardDetailModal').style.display = 'none';
+        }
+
+        // Close modal on overlay click
+        document.getElementById('cardDetailModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                closeCardDetailModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeSaveModal();
+                closeCardDetailModal();
+            }
+        });
+    </script>
+
+    <!-- Card detail modal -->
+    <div id="cardDetailModal" class="modal" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    ">
+        <div class="modal-content" style="
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow-y: auto;
+            margin: 20px;
+            box-shadow: var(--shadow-xl);
+        ">
+            <div class="modal-header" style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid var(--gray-200);
+            ">
+                <h2 id="modalTitle" class="modal-title" style="
+                    font-size: 20px;
+                    font-weight: 700;
+                    color: var(--gray-900);
+                "></h2>
+                <button onclick="closeCardDetailModal()" style="
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    cursor: pointer;
+                    color: var(--gray-500);
+                    padding: 0;
+                    width: 32px;
+                    height: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: var(--radius-md);
+                    transition: all var(--transition-fast);
+                ">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="modalDescription" style="
+                    font-size: 16px;
+                    line-height: 1.6;
+                    color: var(--gray-700);
+                    margin-bottom: 24px;
+                    white-space: pre-wrap;
+                "></div>
+                <div id="modalTags" style="
+                    margin-bottom: 24px;
+                "></div>
+                <div class="modal-meta" style="
+                    display: flex;
+                    align-items: center;
+                    gap: 24px;
+                    padding-top: 16px;
+                    border-top: 1px solid var(--gray-200);
+                    font-size: 14px;
+                    color: var(--gray-500);
+                ">
+                    <span id="modalDate"></span>
+                    <span id="modalLikes"></span>
+                    <span id="modalFavorites"></span>
+                    <span id="modalViews"></span>
+                    <span id="modalUses"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

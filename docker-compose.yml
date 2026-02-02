@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  note-prompt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-8080}:80"
+    environment:
+      - PYTHON_API_URL=${PYTHON_API_URL:-http://python-backend:8000}
+      - JAVA_API_URL=${JAVA_API_URL:-http://java-backend:8080}
+    restart: always

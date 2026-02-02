@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  note-prompt:
+    extends:
+      file: docker-compose.yml
+      service: note-prompt
+    environment:
+      - VITE_APP_ENV=production
+      - PYTHON_API_URL=http://prod-python-api.example.com
+      - JAVA_API_URL=http://prod-java-api.example.com
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"

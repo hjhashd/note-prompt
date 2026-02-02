@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册登录</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-bottom: none;
+        }
+        
+        .tab.active {
+            background-color: white;
+            border-top: 2px solid #4CAF50;
+            font-weight: bold;
+        }
+        
+        .form-container {
+            margin-top: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+        }
+        
+        .error-message {
+            color: red;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        .form {
+            display: none;
+        }
+        
+        .form.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>注册登录系统</h2>
+        
+        <div class="tab-container">
+            <div class="tab active" onclick="switchTab('login')">登录</div>
+            <div class="tab" onclick="switchTab('register')">注册</div>
+        </div>
+        
+        <div class="form-container">
+            <!-- 登录表单 -->
+            <div id="login" class="form active">
+                <div class="form-group">
+                    <label for="login-username">账号</label>
+                    <input type="text" id="login-username" placeholder="请输入账号">
+                    <div class="error-message" id="login-username-error">请输入账号</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="login-password">密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码">
+                    <div class="error-message" id="login-password-error">请输入密码</div>
+                </div>
+                
+                <button onclick="login()">登录</button>
+            </div>
+            
+            <!-- 注册表单 -->
+            <div id="register" class="form">
+                <div class="form-group">
+                    <label for="register-username">账号</label>
+                    <input type="text" id="register-username" placeholder="请输入账号">
+                    <div class="error-message" id="register-username-error">请输入账号</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="register-department">部门</label>
+                    <select id="register-department">
+                        <option value="">请选择部门</option>
+                        <option value="技术部">技术部</option>
+                        <option value="市场部">市场部</option>
+                        <option value="财务部">财务部</option>
+                        <option value="人力资源部">人力资源部</option>
+                    </select>
+                    <div class="error-message" id="register-department-error">请选择部门</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="register-password">密码</label>
+                    <input type="password" id="register-password" placeholder="请输入密码">
+                    <div class="error-message" id="register-password-error">请输入密码</div>
+                </div>
+                
+                <button onclick="register()">注册</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 切换标签
+        function switchTab(tabId) {
+            // 隐藏所有表单
+            document.querySelectorAll('.form').forEach(form => {
+                form.classList.remove('active');
+            });
+            
+            // 移除所有标签的活跃状态
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 显示选中的表单
+            document.getElementById(tabId).classList.add('active');
+            
+            // 激活选中的标签
+            event.currentTarget.classList.add('active');
+        }
+        
+        // 登录验证
+        function login() {
+            let username = document.getElementById('login-username').value;
+            let password = document.getElementById('login-password').value;
+            let isValid = true;
+            
+            // 验证账号
+            if (!username) {
+                document.getElementById('login-username-error').style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('login-username-error').style.display = 'none';
+            }
+            
+            // 验证密码
+            if (!password) {
+                document.getElementById('login-password-error').style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('login-password-error').style.display = 'none';
+            }
+            
+            // 登录成功后跳转到noteprompt_final.html
+            if (isValid) {
+                // 这里可以添加实际的登录逻辑，比如发送请求到服务器验证
+                // 现在我们简单地跳转到目标页面
+                window.location.href = 'noteprompt_final.html';
+            }
+        }
+        
+        // 注册验证
+        function register() {
+            let username = document.getElementById('register-username').value;
+            let department = document.getElementById('register-department').value;
+            let password = document.getElementById('register-password').value;
+            let isValid = true;
+            
+            // 验证账号
+            if (!username) {
+                document.getElementById('register-username-error').style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('register-username-error').style.display = 'none';
+            }
+            
+            // 验证部门
+            if (!department) {
+                document.getElementById('register-department-error').style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('register-department-error').style.display = 'none';
+            }
+            
+            // 验证密码
+            if (!password) {
+                document.getElementById('register-password-error').style.display = 'block';
+                isValid = false;
+            } else {
+                document.getElementById('register-password-error').style.display = 'none';
+            }
+            
+            // 注册成功后跳转到登录标签
+            if (isValid) {
+                // 这里可以添加实际的注册逻辑，比如发送请求到服务器保存用户信息
+                // 现在我们简单地切换到登录标签
+                alert('注册成功！请登录');
+                switchTab('login');
+            }
+        }
+    </script>
+</body>
+</html>
