@@ -14,15 +14,15 @@ export default defineConfig({
     proxy: {
       // Python 后端代理
       '/api/python': {
-        target: process.env.VITE_PYTHON_API_URL || 'http://localhost:8000',
+        target: process.env.VITE_PYTHON_API_URL || 'http://localhost:34521',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/python/, '')
+        rewrite: (path) => path.replace(/^\/api\/python/, '/api')
       },
       // Java 后端代理
       '/api/java': {
-        target: process.env.VITE_JAVA_API_URL || 'http://localhost:8080',
+        target: process.env.VITE_JAVA_API_URL || 'http://localhost:18081',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/java/, '')
+        rewrite: (path) => path.replace(/^\/api\/java/, '/api')
       }
     }
   }

@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # 运行阶段
-FROM nginx:stable-alpine AS production-stage
+FROM nginx:alpine AS production-stage
 
 # 复制编译产物
 COPY --from=build-stage /app/dist /usr/share/nginx/html

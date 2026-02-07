@@ -58,4 +58,27 @@
 ## 4. 迁移建议
 
 - **资源路径**: 确保 `template/` 文件夹内的文件在引用图片或其他资源时使用正确的相对路径。
-- **组件化**: 如果你使用的是 Vue 或 React，建议将 `noteprompt_final.html` 中的侧边栏提取为一个通用的布局组件。
+## 5. 迁移进度跟踪 (Progress Tracking)
+
+目前迁移工作已启动，正在从传统的静态 HTML 原型向现代 Vue 3 + Vite 架构迁移。
+
+### 5.1 已完成项 (Completed)
+- [x] **项目基础架构搭建**: Vue 3 (Composition API) + Vite + TypeScript + Tailwind CSS。
+- [x] **全局设计系统 (UI Design System)**: 
+    - 建立了基于 Indigo 和 Slate 色系的现代 SaaS 视觉风格。
+    - 实现全局毛玻璃 (Glassmorphism) 效果和柔和阴影规范。
+    - 文档参考: `docs/design/ui-design-system.md`。
+- [x] **首页 (Dashboard) 核心组件化**:
+    - `noteprompt_final.html` 已成功拆分为多个独立组件。
+    - [Sidebar.vue](file:///root/zzp/langextract-main/ljt/note-prompt/src/components/layout/Sidebar.vue): 现代侧边栏导航，支持收起/展开。
+    - [TagDirectory.vue](file:///root/zzp/langextract-main/ljt/note-prompt/src/components/layout/TagDirectory.vue): 树形分类管理。
+    - [PromptList.vue](file:///root/zzp/langextract-main/ljt/note-prompt/src/components/layout/PromptList.vue): 响应式卡片流，支持搜索与筛选。
+    - [HomeView.vue](file:///root/zzp/langextract-main/ljt/note-prompt/src/views/HomeView.vue): 首页整体布局组装。
+
+### 5.2 进行中/待处理 (In Progress / Pending)
+- [ ] **提示词编辑器 (Prompt Studio)**: 迁移 `prompt_studio_optimized.html`，实现 AI 优化交互。
+- [ ] **高级优化器 (Prompt Optimus)**: 迁移 `prompt_optimus.html`。
+- [ ] **管理后台与统计**: 迁移 `admin_dashboard.html` 和 `my_stats.html`。
+- [ ] **交互与状态管理**: 使用 Pinia 实现组件间通信（如搜索同步、分类筛选）。
+- [ ] **API 对接**: 将模拟数据替换为后端实际接口。
+

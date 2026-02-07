@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1770308904340" clover="3.2.0">
+  <project timestamp="1770308904341" name="All files">
+    <metrics statements="76" coveredstatements="65" conditionals="57" coveredconditionals="39" methods="16" coveredmethods="13" elements="149" coveredelements="117" complexity="0" loc="76" ncloc="76" packages="1" files="2" classes="2"/>
+    <file name="CopyButton.vue" path="/root/zzp/langextract-main/ljt/note-prompt/src/components/common/CopyButton.vue">
+      <metrics statements="11" coveredstatements="0" conditionals="8" coveredconditionals="0" methods="3" coveredmethods="0"/>
+      <line num="5" count="0" type="stmt"/>
+      <line num="10" count="0" type="stmt"/>
+      <line num="12" count="0" type="stmt"/>
+      <line num="13" count="0" type="stmt"/>
+      <line num="14" count="0" type="stmt"/>
+      <line num="15" count="0" type="stmt"/>
+      <line num="16" count="0" type="stmt"/>
+      <line num="17" count="0" type="stmt"/>
+      <line num="20" count="0" type="stmt"/>
+      <line num="26" count="0" type="stmt"/>
+      <line num="33" count="0" type="cond" truecount="0" falsecount="2"/>
+    </file>
+    <file name="PromptDetailModal.vue" path="/root/zzp/langextract-main/ljt/note-prompt/src/components/common/PromptDetailModal.vue">
+      <metrics statements="65" coveredstatements="65" conditionals="49" coveredconditionals="39" methods="13" coveredmethods="13"/>
+      <line num="8" count="10" type="stmt"/>
+      <line num="14" count="10" type="stmt"/>
+      <line num="19" count="10" type="stmt"/>
+      <line num="20" count="10" type="stmt"/>
+      <line num="21" count="10" type="stmt"/>
+      <line num="23" count="10" type="stmt"/>
+      <line num="24" count="1" type="stmt"/>
+      <line num="27" count="10" type="stmt"/>
+      <line num="28" count="2" type="cond" truecount="4" falsecount="1"/>
+      <line num="30" count="2" type="stmt"/>
+      <line num="31" count="2" type="stmt"/>
+      <line num="32" count="2" type="stmt"/>
+      <line num="33" count="1" type="stmt"/>
+      <line num="34" count="1" type="cond" truecount="1" falsecount="1"/>
+      <line num="35" count="2" type="cond" truecount="1" falsecount="1"/>
+      <line num="38" count="2" type="stmt"/>
+      <line num="40" count="1" type="stmt"/>
+      <line num="42" count="2" type="stmt"/>
+      <line num="46" count="10" type="stmt"/>
+      <line num="48" count="22" type="stmt"/>
+      <line num="49" count="12" type="cond" truecount="4" falsecount="0"/>
+      <line num="50" count="11" type="stmt"/>
+      <line num="53" count="11" type="cond" truecount="4" falsecount="0"/>
+      <line num="54" count="6" type="stmt"/>
+      <line num="55" count="6" type="stmt"/>
+      <line num="57" count="5" type="stmt"/>
+      <line num="60" count="11" type="stmt"/>
+      <line num="61" count="11" type="stmt"/>
+      <line num="64" count="6" type="stmt"/>
+      <line num="65" count="6" type="stmt"/>
+      <line num="66" count="6" type="stmt"/>
+      <line num="68" count="6" type="stmt"/>
+      <line num="70" count="6" type="stmt"/>
+      <line num="72" count="4" type="stmt"/>
+      <line num="74" count="10" type="stmt"/>
+      <line num="78" count="1" type="cond" truecount="1" falsecount="1"/>
+      <line num="79" count="1" type="stmt"/>
+      <line num="80" count="1" type="stmt"/>
+      <line num="86" count="10" type="stmt"/>
+      <line num="87" count="31" type="stmt"/>
+      <line num="89" count="31" type="stmt"/>
+      <line num="90" count="31" type="stmt"/>
+      <line num="91" count="31" type="stmt"/>
+      <line num="92" count="31" type="stmt"/>
+      <line num="94" count="84" type="cond" truecount="2" falsecount="0"/>
+      <line num="95" count="22" type="cond" truecount="2" falsecount="0"/>
+      <line num="96" count="13" type="cond" truecount="2" falsecount="0"/>
+      <line num="97" count="6" type="cond" truecount="2" falsecount="0"/>
+      <line num="98" count="1" type="stmt"/>
+      <line num="103" count="22" type="stmt"/>
+      <line num="115" count="1" type="stmt"/>
+      <line num="116" count="1" type="stmt"/>
+      <line num="117" count="1" type="stmt"/>
+      <line num="118" count="1" type="stmt"/>
+      <line num="119" count="1" type="stmt"/>
+      <line num="123" count="1" type="stmt"/>
+      <line num="125" count="1" type="stmt"/>
+      <line num="132" count="1" type="stmt"/>
+      <line num="133" count="31" type="stmt"/>
+      <line num="138" count="1" type="stmt"/>
+      <line num="139" count="1" type="stmt"/>
+      <line num="157" count="1" type="stmt"/>
+      <line num="158" count="1" type="stmt"/>
+      <line num="162" count="1" type="stmt"/>
+      <line num="173" count="34" type="stmt"/>
+    </file>
+  </project>
+</coverage>

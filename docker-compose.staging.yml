@@ -7,5 +7,6 @@ services:
       service: note-prompt
     environment:
       - VITE_APP_ENV=staging
-      - PYTHON_API_URL=http://staging-python:8000
-      - JAVA_API_URL=http://staging-java:8080
+      # 使用 Docker 内部网络别名，不要写外部 IP
+      - PYTHON_API_URL=http://python-backend:8000
+      - JAVA_API_URL=http://java-backend:8080

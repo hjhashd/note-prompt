@@ -1,9 +1,11 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { useUserStore } from '@/stores/user'
+import { useToast } from '@/composables/useToast'
 
 // 创建 Axios 实例
+// 智能策略：不设置绝对 baseURL，使用相对路径，自动适配当前访问的域名/IP/端口
 const service: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/', // 默认由 Vite 或 Nginx 代理
+  baseURL: '/api', // 统一使用 /api 前缀，配合 proxy/nginx 转发
   timeout: 10000,
 })
 
@@ -24,27 +26,35 @@ service.interceptors.request.use(
 // 响应拦截器
 service.interceptors.response.use(
   (response: AxiosResponse) => {
+    // 检查响应数据是否为对象，防止返回 HTML (如 404/500 页) 导致解析错误
+    if (!response.data || typeof response.data !== 'object') {
+      console.error('[API Error] Invalid JSON response:', response.data)
+      return Promise.reject(new Error('Invalid JSON response'))
+    }
+
     const { code, data, message } = response.data
 
-    // 业务逻辑成功判断（假设 200 为成功）
-    if (code === 200) {
+    // 业务逻辑成功判断（0 为成功，200 为新服务成功码）
+    if (code === 0 || code === 200) {
       // 直接解析并返回 response.data.data
       return data
     }
 
     // 统一处理业务错误
-    console.error(`[API Error] ${message || 'Unknown Error'}`)
-    alert(message || '请求失败')
-    return Promise.reject(new Error(message || 'Error'))
+    console.error(`[API Error] Code: ${code}, Message: ${message || 'Unknown Error'}`)
+    const { toast } = useToast()
+    toast(message || `API Error ${code}`, 'error')
+    return Promise.reject(new Error(message || `API Error ${code}`))
   },
   (error) => {
+    const { toast } = useToast()
     // 处理 HTTP 状态码错误
     if (error.response?.status === 401) {
       const userStore = useUserStore()
       userStore.clearToken()
-      alert('登录已过期，请重新进入')
+      toast('登录已过期，请重新进入', 'warning')
     } else {
-      alert(error.message || '网络错误')
+      toast(error.message || '网络错误', 'error')
     }
     return Promise.reject(error)
   }

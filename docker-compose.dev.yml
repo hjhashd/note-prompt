@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  note-prompt:
+    extends:
+      file: docker-compose.yml
+      service: note-prompt
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "${DEV_PORT:-5173}:5173"
+    environment:
+      - VITE_APP_ENV=development
+      - VITE_PYTHON_API_URL=${DEV_PYTHON_API_URL:-http://host.docker.internal:34521}
+      - VITE_JAVA_API_URL=${DEV_JAVA_API_URL:-http://host.docker.internal:18081}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: npm run dev -- --host

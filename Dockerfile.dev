@@ -1,0 +1,14 @@
+# 开发阶段 Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 安装依赖
+COPY package*.json ./
+RUN npm install
+
+# 暴露 Vite 默认端口
+EXPOSE 5173
+
+# 启动开发服务器
+CMD ["npm", "run", "dev", "--", "--host"]

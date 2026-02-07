@@ -5,9 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "${APP_PORT:-8080}:80"
+    # ports:  <-- 移除了这里的 ports，改为在具体的 dev/prod 文件中定义
     environment:
-      - PYTHON_API_URL=${PYTHON_API_URL:-http://python-backend:8000}
-      - JAVA_API_URL=${JAVA_API_URL:-http://java-backend:8080}
+      - PYTHON_API_URL=${PYTHON_API_URL:-http://python-backend:12543}
+      - JAVA_API_URL=${JAVA_API_URL:-http://java-backend:${JAVA_PORT:-18081}}
     restart: always

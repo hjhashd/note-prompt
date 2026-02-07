@@ -12,6 +12,8 @@ export class SmartBridge {
 
   constructor(targetWindow = window.parent, targetOrigin = '*') {
     this.targetWindow = targetWindow;
+    // 智能策略：默认允许所有 Origin，因为项目可能运行在内网 IP、VPN 虚拟 IP 或公网域名下
+    // 如果需要更严格的安全限制，建议在握手协议中进行动态校验，而不是硬编码
     this.targetOrigin = targetOrigin;
     window.addEventListener('message', this._handleMessage.bind(this));
   }
