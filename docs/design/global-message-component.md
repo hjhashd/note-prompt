@@ -9,19 +9,30 @@
 - **Modern & Floating**: 采用悬浮卡片设计，支持亮色/暗色模式。
 - **Type-Safe**: 基于 TypeScript 开发，提供完整的类型提示。
 - **Global Access**: 通过 Composable (`useToast`) 实现全局调用，无需在每个组件中单独引入 UI。
-- **Animation**: 使用 Vue `TransitionGroup` 实现流畅的进入和退出动画。
+- **Animation**: 使用 Vue `TransitionGroup` 实现流畅的进入和退出动画，并辅以 CSS Keyframes 增强微交互。
+- **Pill Shape**: 遵循 UI 设计系统，采用胶囊形状 (Pill Shape) 和大圆角设计。
+- **Top Layer**: 确保 `z-index` 高于所有模态框 (Modal) 和遮罩层。
 
 ## 核心组件
 
 ### 1. `ToastContainer`
-- **位置**: 全局挂载于 `App.vue`，默认位于屏幕右上角 (桌面端) 或 顶部居中 (移动端)。
+- **位置**: 全局挂载于 `App.vue`，默认位于屏幕右上角 (桌面端) 或 底部居中 (移动端)。
+- **层级**: `z-index: 9999`，确保在模态框（通常为 `z-index: 1000`）上方显示。
 - **功能**: 管理消息队列的渲染和动画。
 
 ### 2. `ToastItem`
-- **样式**: 白色背景 (暗色模式为深灰色)，带有细微阴影和边框。
-- **图标**: 根据消息类型 (`success`, `error`, `warning`, `info`) 显示不同的 Lucide 图标。
+- **样式**: 胶囊形设计，背景色根据消息类型带有轻微渐变感，配合 `var(--radius-xl)`。
+- **视觉反馈**: 针对不同类型 (`success`, `error` 等) 提供不同的左侧背景色微调。
+- **图标**: 根据消息类型显示不同的 Lucide 图标。
 
-## 如何使用
+## 样式规范
+
+| 属性 | 值 | 说明 |
+| :--- | :--- | :--- |
+| 圆角 | `var(--radius-xl)` (24px) | 胶囊形状 |
+| 阴影 | `0 10px 25px -5px rgba(0, 0, 0, 0.08)` | 柔和的深层阴影 |
+| 层级 | `9999` | 页面最顶层 |
+| 字体 | 14px, Medium | 提高可读性 |
 
 ### 在 Vue 组件中使用
 

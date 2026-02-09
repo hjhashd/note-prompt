@@ -1,0 +1,15 @@
+node_modules
+dist
+docs
+.trae
+.git
+.DS_Store
+*.md
+.env*
+! .env.example
+docker-compose*.yml
+Dockerfile*
+deploy.sh
+rollback.sh
+start-*.sh
+stop-*.sh

@@ -18,7 +18,6 @@ const pageSize = ref(12)
 const showDetailModal = ref(false)
 const selectedPromptId = ref<number | null>(null)
 const selectedPromptData = ref<PromptItem | null>(null)
-const promptCache = new Map<number, PromptItem>()
 
 const props = defineProps<{
   isSidebarCollapsed?: boolean
@@ -161,19 +160,8 @@ const getPromptEmoji = (tags: string[]) => {
 
 const handleCardClick = (prompt: PromptItem) => {
   selectedPromptId.value = prompt.id
-  // Prefer cached full detail, fallback to list item summary
-  selectedPromptData.value = promptCache.get(prompt.id) || prompt
+  selectedPromptData.value = prompt
   showDetailModal.value = true
-}
-
-const handleCardHover = async (prompt: PromptItem) => {
-  if (promptCache.has(prompt.id)) return
-  try {
-     const detail = await getPromptDetail(prompt.id)
-     promptCache.set(prompt.id, detail)
-  } catch (e) {
-     // silent error
-  }
 }
 
 const handleToggleFavorite = async (prompt: PromptItem) => {
@@ -287,7 +275,6 @@ onBeforeUnmount(() => {
         :key="prompt.id" 
         class="prompt-card" 
         @click="handleCardClick(prompt)"
-        @mouseenter="handleCardHover(prompt)"
       >
         <div class="card-header">
           <div class="header-top">
@@ -390,13 +377,13 @@ onBeforeUnmount(() => {
 
 /* Toolbar */
 .toolbar {
-  padding: 20px;
+  padding: 16px;
   border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid rgba(0,0,0,0.02);
   box-shadow: var(--shadow-sm);
 }
 
@@ -414,24 +401,23 @@ onBeforeUnmount(() => {
   left: 16px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--gray-400);
+  color: var(--text-tertiary);
 }
 
 .main-search-input {
   width: 100%;
-  padding: 14px 88px 14px 48px;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-lg);
-  font-size: 16px;
-  background: var(--bg-surface);
+  padding: 12px 88px 12px 48px;
+  border: none;
+  border-radius: 24px; /* Pill Shape */
+  font-size: 15px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   transition: all var(--transition-fast);
-  box-shadow: var(--shadow-sm);
 }
 
 .main-search-input:focus {
   outline: none;
-  border-color: var(--primary-300);
-  box-shadow: 0 0 0 4px var(--primary-50);
+  background: var(--bg-primary);
 }
 
 .search-shortcut {
@@ -442,7 +428,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--gray-400);
+  color: var(--text-tertiary);
   font-size: 12px;
   pointer-events: none;
 }
@@ -451,9 +437,9 @@ onBeforeUnmount(() => {
   font: inherit;
   padding: 2px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  background: rgba(255, 255, 255, 0.75);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(0,0,0,0.05);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.05);
 }
 
 .kbd-plus {
@@ -480,31 +466,32 @@ onBeforeUnmount(() => {
 
 .filter-tabs {
   display: flex;
-  background: var(--gray-100);
+  background: var(--bg-secondary);
   padding: 4px;
-  border-radius: var(--radius-lg);
+  border-radius: 24px;
   gap: 4px;
 }
 
 .filter-tab {
-  padding: 8px 16px;
+  padding: 6px 16px;
   border: none;
   background: transparent;
-  color: var(--gray-600);
+  color: var(--text-secondary);
   font-weight: 500;
   font-size: 14px;
-  border-radius: var(--radius-md);
+  border-radius: 20px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .filter-tab:hover {
-  color: var(--gray-900);
+  color: var(--text-primary);
+  background: rgba(0,0,0,0.03);
 }
 
 .filter-tab.active {
   background: var(--bg-surface);
-  color: var(--primary-600);
+  color: var(--primary);
   box-shadow: var(--shadow-sm);
   font-weight: 600;
 }
@@ -516,8 +503,8 @@ onBeforeUnmount(() => {
 }
 
 .sort-label {
-  font-size: 14px;
-  color: var(--gray-500);
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .select-wrapper {
@@ -527,26 +514,31 @@ onBeforeUnmount(() => {
 }
 
 .sort-select {
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius-md);
+  border: none;
+  border-radius: 20px;
   padding: 6px 32px 6px 12px;
-  font-size: 14px;
-  color: var(--gray-700);
-  background: white;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
   cursor: pointer;
   appearance: none;
+  transition: all var(--transition-fast);
+}
+
+.sort-select:hover {
+  background: rgba(0,0,0,0.05);
 }
 
 .select-icon {
   position: absolute;
   right: 10px;
-  color: var(--gray-400);
+  color: var(--text-tertiary);
   pointer-events: none;
 }
 
 .sort-select:focus {
   outline: none;
-  border-color: var(--primary-300);
+  background: var(--bg-primary);
 }
 
 /* Stats */
@@ -559,37 +551,15 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--gray-500);
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 /* Grid */
 .prompt-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* 默认显示3张卡片 */
-  gap: 24px;
-}
-
-/* 当侧边栏收起时，展示更多，视空间决定 */
-.prompt-grid.sidebar-collapsed {
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-
-@media (max-width: 1280px) {
-  .prompt-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  /* 在较小屏幕上，即使侧边栏收起也保持响应式 */
-  .prompt-grid.sidebar-collapsed {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  }
-}
-
-@media (max-width: 768px) {
-  .prompt-grid {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--layout-gap);
 }
 
 .prompt-card {
@@ -600,18 +570,16 @@ onBeforeUnmount(() => {
   transition: all var(--transition-normal);
   position: relative;
   overflow: hidden;
-  height: 220px; /* 固定高度，确保长方形比例 */
-  border: 1px solid var(--border-subtle);
+  height: 240px;
+  border: 1px solid rgba(0,0,0,0.02);
   background: var(--bg-surface);
   box-shadow: var(--shadow-sm);
-  animation: fadeUp 260ms ease both;
   cursor: pointer;
 }
 
 .prompt-card:hover {
   transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--primary-200);
+  box-shadow: var(--shadow-card);
 }
 
 .card-header {
@@ -633,10 +601,10 @@ onBeforeUnmount(() => {
 .like-btn {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  border-radius: 50%;
+  border: none;
   background: transparent;
-  color: var(--gray-400);
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -645,8 +613,12 @@ onBeforeUnmount(() => {
 }
 
 .like-btn:hover {
-  background: var(--gray-50);
-  color: var(--danger);
+  background: rgba(0,0,0,0.05);
+  color: #ef4444;
+}
+
+.like-btn.liked {
+  color: #ef4444;
 }
 
 .card-body {
@@ -655,9 +627,9 @@ onBeforeUnmount(() => {
 }
 
 .prompt-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
-  color: var(--gray-900);
+  color: var(--text-primary);
   margin-bottom: 0;
   line-height: 1.4;
   display: flex;
@@ -683,13 +655,14 @@ onBeforeUnmount(() => {
 }
 
 .prompt-desc {
-  font-size: 13px;
-  color: var(--gray-500);
+  font-size: 14px;
+  color: var(--text-secondary);
   line-height: 1.6;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin-top: 8px;
 }
 
 .prompt-tags {
@@ -700,52 +673,44 @@ onBeforeUnmount(() => {
 
 .tag {
   font-size: 11px;
-  color: var(--gray-700);
-  background: var(--gray-100);
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 100px;
   font-weight: 500;
-  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .tag--blue {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-color: rgba(29, 78, 216, 0.18);
+  color: #1a73e8;
+  background: #e8f0fe;
 }
 
 .tag--purple {
-  color: #6d28d9;
-  background: #f5f3ff;
-  border-color: rgba(109, 40, 217, 0.18);
+  color: #7030a0;
+  background: #f3e5f5;
 }
 
 .tag--amber {
-  color: #b45309;
-  background: #fffbeb;
-  border-color: rgba(180, 83, 9, 0.18);
+  color: #e67c73;
+  background: #feefe3;
 }
 
 .tag--emerald {
-  color: #047857;
-  background: #ecfdf5;
-  border-color: rgba(4, 120, 87, 0.18);
+  color: #0f9d58;
+  background: #e6f4ea;
 }
 
 .tag--gray {
-  color: var(--gray-600);
-  background: var(--gray-100);
-  border-color: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
 }
 
 .card-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid var(--gray-100);
+  padding-top: 16px;
+  border-top: 1px solid var(--bg-primary);
   font-size: 12px;
-  color: var(--gray-400);
+  color: var(--text-tertiary);
 }
 
 .author-info {
@@ -755,23 +720,30 @@ onBeforeUnmount(() => {
 }
 
 .author-avatar {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: var(--gray-100);
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--gray-500);
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .divider {
-  color: var(--gray-200);
+  color: var(--bg-primary);
 }
 
 .metrics {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
 .metric {
@@ -782,18 +754,7 @@ onBeforeUnmount(() => {
 
 /* Overlay Action */
 .card-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all var(--transition-normal);
-  pointer-events: none;
+  display: none;
 }
 
 .use-btn {

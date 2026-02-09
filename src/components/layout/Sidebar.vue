@@ -2,8 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
-  PanelLeftClose, 
-  PanelLeftOpen, 
+  ChevronLeft,
   Home, 
   FolderOpen, 
   Heart, 
@@ -56,7 +55,7 @@ const activeNav = ref('home')
 
 const routeMap: Record<string, string> = {
   home: '/',
-  public: '/public',
+  'my-prompts': '/my-prompts',
   favorites: '/favorites',
   profile: '/profile',
   admin: '/admin',
@@ -84,8 +83,8 @@ watch(
 )
 
 const navItems = [
-  { id: 'home', label: '我的提示词', icon: Home },
-  { id: 'public', label: '公共文件夹', icon: FolderOpen },
+  { id: 'home', label: '公共文件夹', icon: FolderOpen },
+  { id: 'my-prompts', label: '我的提示词', icon: Home },
   { id: 'favorites', label: '我的收藏', icon: Heart },
   { id: 'profile', label: '个人中心', icon: User },
   { id: 'admin', label: '管理员面板', icon: Shield }
@@ -94,7 +93,7 @@ const navItems = [
 
 <template>
   <aside class="sidebar" :class="{ collapsed: props.collapsed }" id="sidebar">
-    <!-- Header / Logo + Toggle -->
+    <!-- Header / Logo -->
     <div class="sidebar-header">
       <div class="logo-container">
         <div class="logo-icon">
@@ -106,12 +105,17 @@ const navItems = [
           <span class="logo-text" v-if="!props.collapsed">NotePrompt</span>
         </transition>
       </div>
-      
-      <!-- Toggle Button (Restored to Header) -->
-      <button class="sidebar-toggle" @click="emit('toggle')" :title="props.collapsed ? '展开侧边栏' : '收起侧边栏'">
-        <component :is="props.collapsed ? PanelLeftOpen : PanelLeftClose" :size="20" />
-      </button>
     </div>
+
+    <!-- Toggle Button (Floating on Border) -->
+    <button 
+      class="sidebar-toggle-floating" 
+      @click="emit('toggle')" 
+      :class="{ collapsed: props.collapsed }"
+      :title="props.collapsed ? '展开侧边栏' : '收起侧边栏'"
+    >
+      <ChevronLeft :size="16" class="toggle-icon" />
+    </button>
 
     <!-- Navigation -->
     <nav class="sidebar-nav">
@@ -168,11 +172,11 @@ const navItems = [
   top: 0;
   display: flex;
   flex-direction: column;
-  transition: width var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 50;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-subtle);
-  padding: 12px;
+  background: var(--bg-surface);
+  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 16px;
 }
 
 .sidebar.collapsed {
@@ -185,15 +189,15 @@ const navItems = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  margin-bottom: 24px;
-  overflow: hidden; /* Prevent content jumping */
+  padding: 0 8px;
+  margin-bottom: 32px;
+  overflow: hidden;
 }
 
 .sidebar.collapsed .sidebar-header {
   justify-content: center;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   padding: 0;
 }
 
@@ -208,13 +212,12 @@ const navItems = [
 .logo-icon {
   width: 32px;
   height: 32px;
-  background: var(--bg-surface);
-  border-radius: 50%;
+  background: var(--text-primary);
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary);
-  box-shadow: var(--shadow-sm);
+  color: var(--bg-surface);
   flex-shrink: 0;
 }
 
@@ -225,33 +228,86 @@ const navItems = [
 
 .logo-text {
   font-size: 20px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.5px;
+  letter-spacing: -0.02em;
 }
 
-.sidebar-toggle {
-  width: 32px;
-  height: 32px;
+/* Floating Toggle Button */
+.sidebar-toggle-floating {
+  position: absolute;
+  right: -12px;
+  top: 48px;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
   border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
+  z-index: 100;
+  color: var(--text-secondary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
+  backdrop-filter: blur(8px);
 }
 
-.sidebar-toggle:hover {
-  background: rgba(0,0,0,0.05);
-  color: var(--text-primary);
+/* Hitbox to make it easier to hover */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  right: -10px;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 99;
 }
 
-.sidebar.collapsed .sidebar-toggle {
-  margin-top: 4px; /* Slight adjustment when stacked vertically */
+.sidebar:hover .sidebar-toggle-floating,
+.sidebar-toggle-floating:hover {
+  opacity: 1;
+}
+
+.sidebar-toggle-floating:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--primary-light), 0 4px 12px rgba(26, 115, 232, 0.2);
+  transform: scale(1.15);
+}
+
+.toggle-icon {
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.sidebar-toggle-floating.collapsed .toggle-icon {
+  transform: rotate(180deg);
+}
+
+.sidebar-toggle-floating.collapsed {
+  opacity: 1;
+}
+
+/* Border highlight effect on hover */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--primary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 101;
+  pointer-events: none;
+}
+
+.sidebar:hover::before {
+  opacity: 0.1;
 }
 
 /* Navigation */
@@ -267,7 +323,7 @@ const navItems = [
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
 .nav-item {
@@ -278,7 +334,7 @@ const navItems = [
   border-radius: 24px;
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   font-weight: 500;
   font-size: 14px;
   white-space: nowrap;
@@ -293,13 +349,13 @@ const navItems = [
 }
 
 .nav-item:hover {
-  background: rgba(0,0,0,0.05);
+  background: var(--bg-primary);
   color: var(--text-primary);
 }
 
 .nav-item.active {
-  background: var(--primary-light);
-  color: var(--primary);
+  background: #e8f0fe;
+  color: #1a73e8;
 }
 
 .nav-icon {
@@ -307,7 +363,7 @@ const navItems = [
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 20px; /* Ensure fixed width for icon container */
+  width: 24px;
 }
 
 .nav-text {
@@ -319,47 +375,43 @@ const navItems = [
   margin-top: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* User Profile */
 .user-profile {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 10px;
+  border-radius: 24px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   overflow: hidden;
   white-space: nowrap;
   border: 1px solid transparent;
 }
 
 .user-profile:hover {
-  background: var(--bg-surface);
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  background: var(--bg-primary);
 }
 
 .user-profile.active {
-  background: var(--bg-surface);
-  border-color: var(--border-subtle);
+  background: var(--bg-primary);
 }
 
 .sidebar.collapsed .user-profile {
   justify-content: center;
   padding: 0;
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   margin: 0 auto;
-  border-radius: 50%;
 }
 
 .avatar {
   width: 32px;
   height: 32px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-600));
-  color: white;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -367,12 +419,11 @@ const navItems = [
   font-weight: 600;
   font-size: 14px;
   flex-shrink: 0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  border: 2px solid white;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .user-info {
-  margin-left: 10px;
+  margin-left: 12px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -382,41 +433,40 @@ const navItems = [
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.01em;
 }
 
 .user-menu {
   position: absolute;
-  bottom: 70px;
-  left: 12px;
-  right: 12px;
-  background: white;
-  border-radius: var(--radius-md);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--border-light);
-  padding: 4px;
+  bottom: 80px;
+  left: 16px;
+  right: 16px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 8px;
   z-index: 100;
 }
 
 .sidebar.collapsed .user-menu {
-  width: 160px;
-  left: 60px;
-  bottom: 12px;
+  width: 180px;
+  left: 72px;
+  bottom: 16px;
 }
 
 .menu-item {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 12px;
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 14px;
   color: var(--text-secondary);
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
 }
 
 .menu-item:hover {
@@ -425,11 +475,28 @@ const navItems = [
 }
 
 .menu-item.logout {
-  color: #ef4444;
+  color: #d93025;
 }
 
 .menu-item.logout:hover {
-  background: #fef2f2;
+  background: #fff0f0;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .sidebar-toggle-floating {
+    width: 32px;
+    height: 32px;
+    right: -16px;
+    opacity: 1; /* Always show on mobile for better accessibility */
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  
+  .sidebar-toggle-floating.collapsed {
+    right: -16px;
+  }
 }
 
 /* Transitions */

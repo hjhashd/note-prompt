@@ -47,15 +47,14 @@ const handleCopy = async () => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  color: var(--gray-600);
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 24px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.2s ease;
   height: 32px;
-  box-shadow: var(--shadow-sm);
 }
 
 .copy-btn.icon-only {
@@ -65,15 +64,14 @@ const handleCopy = async () => {
 
 .copy-btn:hover {
   background: var(--bg-primary);
-  color: var(--primary-600);
-  border-color: var(--primary-200);
-  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .copy-btn.copied {
-  color: var(--success);
-  border-color: var(--success);
-  background: rgba(16, 185, 129, 0.05);
+  color: #137333;
+  background: #e6f4ea;
+  border-color: transparent;
 }
 
 .label {

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '@/views/HomeView.vue'
+import PublicFolder from '@/views/PublicFolder.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -7,13 +7,13 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: HomeView,
+      component: PublicFolder,
       meta: { requiresAuth: true }
     },
     {
-      path: '/public',
-      name: 'public',
-      component: () => import('../views/PublicFolder.vue'),
+      path: '/my-prompts',
+      name: 'my-prompts',
+      component: () => import('../views/MyPromptsView.vue'),
       meta: { requiresAuth: true }
     },
     {

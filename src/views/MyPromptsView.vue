@@ -71,14 +71,14 @@ const createPrompt = () => {
 .app-layout {
     display: flex;
     min-height: 100vh;
-    background-color: var(--bg-surface-soft);
+    background-color: var(--bg-primary);
 }
 
 .main-content {
     flex: 1;
     margin-left: var(--sidebar-width);
     min-width: 0;
-    background: var(--bg-primary);
+    background: transparent;
     height: 100vh;
     transition: margin-left var(--transition-normal);
     display: flex;
@@ -92,20 +92,24 @@ const createPrompt = () => {
 
 .content-body {
     flex: 1;
-    padding: 2rem;
+    padding: var(--layout-gap);
     overflow-y: auto;
 }
 
 .content-container {
     max-width: 1600px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 .page-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 40px;
+    align-items: flex-end;
+    margin-bottom: 24px;
+    padding: 0 8px;
 }
 
 .header-actions {
@@ -114,16 +118,16 @@ const createPrompt = () => {
 }
 
 .page-title {
-    font-size: 32px;
-    font-weight: 800;
-    color: var(--gray-900);
-    margin-bottom: 8px;
-    letter-spacing: -0.02em;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
 }
 
 .page-desc {
-    font-size: 16px;
-    color: var(--gray-500);
+    font-size: 14px;
+    color: var(--text-secondary);
     max-width: 600px;
     line-height: 1.5;
 }
@@ -132,22 +136,23 @@ const createPrompt = () => {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: linear-gradient(135deg, var(--primary-600), var(--primary-500));
-    color: white;
+    background: var(--text-primary);
+    color: var(--text-inverse);
     border: none;
-    padding: 12px 24px;
-    border-radius: var(--radius-lg);
+    padding: 10px 24px;
+    border-radius: 24px; /* Pill Shape */
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
     cursor: pointer;
     transition: all var(--transition-fast);
-    box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2), 0 2px 4px -1px rgba(79, 70, 229, 0.1);
+    box-shadow: var(--shadow-sm);
     text-decoration: none;
 }
 
 .btn-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 8px -1px rgba(79, 70, 229, 0.3), 0 3px 6px -1px rgba(79, 70, 229, 0.15);
+    box-shadow: var(--shadow-md);
+    background: #000;
 }
 
 .btn-primary:active {
@@ -156,13 +161,14 @@ const createPrompt = () => {
 
 .main-grid {
     display: grid;
-    grid-template-columns: 280px 1fr;
-    gap: 40px;
+    grid-template-columns: 300px 1fr;
+    gap: var(--layout-gap);
+    flex: 1;
+    min-height: 0;
 }
 
 .main-grid.directory-collapsed {
     grid-template-columns: 72px 1fr;
-    gap: 28px;
 }
 
 /* Responsive */

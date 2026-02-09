@@ -31,21 +31,23 @@ import ThinkBlock from '@/components/editor/ThinkBlock.vue'
 ## Integration Guidelines
 
 ### 1. Data Parsing
-When receiving streaming responses from the AI API, the application must parse the `<think>` tags to separate the reasoning content from the final output.
+When receiving streaming responses from the AI API, the application must parse the `<think>` tags to separate the reasoning content from the final output. It is important to handle the content appearing *before* the `<think>` tag (e.g., initial greetings).
 
 **Standard Parsing Logic:**
 ```typescript
 const thinkStart = fullResponse.indexOf('<think>')
+const thinkEnd = fullResponse.indexOf('</think>')
+
 if (thinkStart !== -1) {
-  const thinkEnd = fullResponse.indexOf('</think>')
+  const preThink = fullResponse.substring(0, thinkStart)
   if (thinkEnd !== -1) {
     // Thought process complete
     thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
-    realContent.value = fullResponse.substring(thinkEnd + 8).trimStart()
+    realContent.value = preThink + fullResponse.substring(thinkEnd + 8).trimStart()
   } else {
     // Thought process in progress
     thinkContent.value = fullResponse.substring(thinkStart + 7)
-    // Optionally hide realContent until thinking is done, or show partial
+    realContent.value = preThink
   }
 } else {
   // No thought tags (yet), treat as normal content
@@ -59,9 +61,13 @@ This pattern should be applied to:
 - **Chat/Dialogue**: In the conversation view (`StudioDialogue`).
 - **Test/Config Panel**: In the "Quick Test" results area (`StudioConfig`).
 
-## Design Specifications
-- **Background**: `#f8fafc` (Slate-50)
-- **Border**: `1px solid #e2e8f0` (Slate-200)
-- **Border Radius**: `12px`
-- **Typography**: `14px`, Slate-600 (`#475569`)
-- **Spacing**: `margin-bottom: 16px` to separate from main content.
+## Styling & Libraries
+- **Parsing Engine**: `markdown-it` (Version 14.1.0+)
+- **CSS Foundation**: `github-markdown-css`
+- **Iconography**: `lucide-vue-next` (BrainCircuit, ChevronDown, ChevronUp)
+
+### Implementation Tip
+To apply these styles globally:
+1.  **Componentize**: Use `ThinkBlock.vue` as the universal container for AI reasoning.
+2.  **Global Markdown Style**: Import `github-markdown-css` in `main.ts` or as a scoped import in common components to ensure all AI-generated content shares the same professional look.
+3.  **Scoped Styling**: Use `:deep(.markdown-body)` to fine-tune AI output appearance inside specific parent containers without affecting global styles.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { optimizeStream } from '@/api/lyf-ai'
 import { Undo2, Redo2, Trash2, X } from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
@@ -106,7 +106,10 @@ const handleOptimizeClick = () => {
 }
 
 const confirmOptimize = async () => {
+  // Close modal immediately and wait for DOM update
   showOptimizeConfig.value = false
+  await nextTick()
+
   const scene = optimizeScene.value
   
   const originalContent = props.content
@@ -119,53 +122,57 @@ const confirmOptimize = async () => {
   // Clear content to show streaming generation
   emit('update:content', '正在优化中...')
 
-  await optimizeStream(
-    {
-      raw_prompt: originalContent,
-      target_scene: scene
-    },
-    (chunk) => {
-      // If it's the first chunk, clear the "Optimizing..." placeholder
-      if (fullResponse === '') {
-        emit('update:content', '')
-      }
-      
-      fullResponse += chunk
-      
-      // Parse think content
-      const thinkStart = fullResponse.indexOf('<think>')
-      
-      if (thinkStart !== -1) {
+  try {
+    await optimizeStream(
+      {
+        raw_prompt: originalContent,
+        target_scene: scene
+      },
+      (chunk) => {
+        // If it's the first chunk, clear the "Optimizing..." placeholder
+        if (fullResponse === '') {
+          emit('update:content', '')
+        }
+        
+        fullResponse += chunk
+        
+        // Parse think content
+        const thinkStart = fullResponse.indexOf('<think>')
         const thinkEnd = fullResponse.indexOf('</think>')
         
-        if (thinkEnd !== -1) {
-          // Think block is complete
-          thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
-          const realContent = fullResponse.substring(thinkEnd + 8).trimStart()
-          emit('update:content', realContent)
+        if (thinkStart !== -1) {
+          const preThink = fullResponse.substring(0, thinkStart)
+          if (thinkEnd !== -1) {
+            // Think block is complete
+            thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
+            const realContent = preThink + fullResponse.substring(thinkEnd + 8).trimStart()
+            emit('update:content', realContent)
+          } else {
+            // Think block is open
+            thinkContent.value = fullResponse.substring(thinkStart + 7)
+            emit('update:content', preThink) // Keep pre-think content
+          }
         } else {
-          // Think block is open
-          thinkContent.value = fullResponse.substring(thinkStart + 7)
-          // Don't update content while thinking
+          // No think block found (yet), treat as normal content
+          emit('update:content', fullResponse)
         }
-      } else {
-        // No think block found (yet), treat as normal content
-        if (!fullResponse.trim().startsWith('<think>')) {
-           emit('update:content', fullResponse)
-        }
+      },
+      () => {
+        isOptimizing.value = false
+        toast('优化完成', 'success')
+      },
+      (err) => {
+        console.error(err)
+        toast('优化失败，已恢复原始内容', 'error')
+        emit('update:content', originalContent)
+        isOptimizing.value = false
       }
-    },
-    () => {
-      isOptimizing.value = false
-      toast('优化完成', 'success')
-    },
-    (err) => {
-      console.error(err)
-      toast('优化失败，已恢复原始内容', 'error')
-      emit('update:content', originalContent)
-      isOptimizing.value = false
-    }
-  )
+    )
+  } catch (e) {
+    console.error(e)
+    isOptimizing.value = false
+    emit('update:content', originalContent)
+  }
 }
 
 const variables = computed(() => {
@@ -294,7 +301,7 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
     
     <div class="editor-content">
       <div class="editor-inner-container">
-        <ThinkBlock :content="thinkContent" />
+        <ThinkBlock :content="thinkContent" :scrollable="true" />
         <textarea 
           ref="textareaRef"
           class="main-textarea" 
@@ -362,7 +369,7 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
               placeholder="例如: 公文写作, 代码生成" 
               @keyup.enter="confirmOptimize"
               class="modal-input"
-              autoFocus
+              autofocus
             />
             <p class="hint">指定优化的目标场景，让 AI 更精准地理解您的需求</p>
           </div>

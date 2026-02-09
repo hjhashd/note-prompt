@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { testStream } from '@/api/lyf-ai'
+import MarkdownIt from 'markdown-it'
+import ThinkBlock from './ThinkBlock.vue'
 
 const props = defineProps<{
   content: string
@@ -15,9 +17,57 @@ const thinkContent = ref('')
 const realContent = ref('')
 const isTestExpanded = ref(false)
 const isTesting = ref(false)
+const isConfigCollapsed = ref(false)
+const drawerContentRef = ref<HTMLElement | null>(null)
+const shouldAutoScroll = ref(true)
+
+// 计算替换后的完整提示词
+const renderedPrompt = computed(() => {
+  let preview = props.content
+  detectedVariables.value.forEach(v => {
+    const val = variableValues.value[v] || `{{${v}}}`
+    preview = preview.replaceAll(`{{${v}}}`, val)
+  })
+  return preview
+})
+
+// 复制提示词
+const isCopying = ref(false)
+const copyPrompt = async () => {
+  try {
+    await navigator.clipboard.writeText(renderedPrompt.value)
+    isCopying.value = true
+    setTimeout(() => {
+      isCopying.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy:', err)
+  }
+}
+
+// Markdown renderer
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  breaks: true
+})
 
 // Use a map to store values for variables
 const variableValues = ref<Record<string, string>>({})
+
+// 复制 AI 输出内容 (排除思考内容)
+const isResultCopying = ref(false)
+const copyResult = async () => {
+  try {
+    await navigator.clipboard.writeText(realContent.value)
+    isResultCopying.value = true
+    setTimeout(() => {
+      isResultCopying.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy result:', err)
+  }
+}
 
 // Extract unique variable names from content
 const detectedVariables = computed(() => {
@@ -40,15 +90,27 @@ const emit = defineEmits<{
   (e: 'run-test', input: string): void
 }>()
 
+const scrollToBottom = async () => {
+    if (!drawerContentRef.value || !shouldAutoScroll.value) return
+    
+    await nextTick()
+    const el = drawerContentRef.value
+    el.scrollTop = el.scrollHeight
+}
+
+const handleScroll = () => {
+    if (!drawerContentRef.value) return
+    const el = drawerContentRef.value
+    // If user scrolls up (is not at bottom), disable auto-scroll
+    // 20px threshold to be forgiving
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20
+    shouldAutoScroll.value = isAtBottom
+}
+
 const runTest = async () => {
   if (isTesting.value) return
 
-  // Replace variables in content with user values
-  let preview = props.content
-  detectedVariables.value.forEach(v => {
-    const val = variableValues.value[v] || `[${v}]`
-    preview = preview.replaceAll(`{{${v}}}`, val)
-  })
+  const preview = renderedPrompt.value
   
   emit('run-test', preview)
   
@@ -59,6 +121,8 @@ const runTest = async () => {
   let fullResponse = ''
   
   isTestExpanded.value = true // Auto expand
+  isConfigCollapsed.value = true // Auto collapse config
+  shouldAutoScroll.value = true // Reset auto-scroll
   
   await testStream(
     {
@@ -70,20 +134,22 @@ const runTest = async () => {
       
       // Parse think content
       const thinkStart = fullResponse.indexOf('<think>')
+      const thinkEnd = fullResponse.indexOf('</think>')
+      
       if (thinkStart !== -1) {
-        const thinkEnd = fullResponse.indexOf('</think>')
+        const preThink = fullResponse.substring(0, thinkStart)
         if (thinkEnd !== -1) {
            thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
-           realContent.value = fullResponse.substring(thinkEnd + 8).trimStart()
+           realContent.value = preThink + fullResponse.substring(thinkEnd + 8).trimStart()
         } else {
            thinkContent.value = fullResponse.substring(thinkStart + 7)
-           // realContent.value = '' // Wait until thinking is done? Or show nothing?
+           realContent.value = preThink
         }
       } else {
-         if (!fullResponse.trim().startsWith('<think>')) {
-            realContent.value = fullResponse
-         }
+        realContent.value = fullResponse
       }
+      
+      scrollToBottom()
     },
     () => {
       isTesting.value = false
@@ -92,12 +158,21 @@ const runTest = async () => {
       console.error(err)
       realContent.value += `\n[Error: ${err.message || 'Unknown error'}]`
       isTesting.value = false
+      scrollToBottom()
     }
   )
 }
 
 const toggleTest = () => {
-    isTestExpanded.value = !isTestExpanded.value
+    // 如果已经展开，则隐藏 (收起)
+    if (isTestExpanded.value) {
+        isTestExpanded.value = false
+        isConfigCollapsed.value = false
+    } else {
+        // 如果隐藏，则展开并全屏 (铺满全屏)
+        isTestExpanded.value = true
+        isConfigCollapsed.value = true
+    }
 }
 </script>
 
@@ -112,7 +187,7 @@ const toggleTest = () => {
       </button>
     </div>
 
-    <div class="tools-content">
+    <div class="tools-content" v-show="!isConfigCollapsed">
       <!-- 1. Model & Parameters (Compact) -->
       <div class="config-group">
         <div class="group-header">模型配置</div>
@@ -165,35 +240,99 @@ const toggleTest = () => {
            </div>
         </div>
       </div>
-    </div>
 
-    <!-- 3. Test Area (Bottom Drawer) -->
-    <div class="test-drawer" :class="{ expanded: isTestExpanded }">
-       <div class="drawer-handle" @click="toggleTest">
-          <div class="handle-left">
-              <svg class="drawer-icon" :class="{ rotated: isTestExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="18 15 12 9 6 15"></polyline>
-              </svg>
-              <span class="drawer-title">快速测试</span>
-          </div>
+      <!-- 3. Quick Test (Inputs moved here) -->
+      <div class="config-group">
+        <div class="group-header">
+          <span>快速测试</span>
           <button class="run-btn-sm" @click.stop="runTest" :disabled="isTesting">
             <svg v-if="!isTesting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
             </svg>
             {{ isTesting ? '运行中...' : '运行' }}
           </button>
-       </div>
-       
-       <div class="drawer-content" v-show="isTestExpanded">
+        </div>
+
+        <div class="preview-section">
+           <div class="section-header">
+              <span class="section-title">生成的提示词 (已替换变量)</span>
+              <button class="copy-btn-xs" @click="copyPrompt" :title="isCopying ? '已复制' : '复制完整提示词'">
+                 <svg v-if="!isCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                 </svg>
+                 <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                 </svg>
+                 {{ isCopying ? '已复制' : '复制' }}
+              </button>
+           </div>
+           <div class="rendered-preview">
+              {{ renderedPrompt }}
+           </div>
+        </div>
+
+        <div class="test-input-section">
+          <div class="section-header">
+             <span class="section-title">AI 测试 (输入 User 内容)</span>
+          </div>
           <textarea 
             class="ide-input area" 
             v-model="testInput" 
-            placeholder="输入测试内容..."
+            placeholder="输入测试内容 (例如: '开始撰写' 或 '你好')..."
           ></textarea>
-          <div v-if="realContent || thinkContent" class="test-result">
-             <div class="result-label">输出结果:</div>
-             <ThinkBlock :content="thinkContent" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Test Area (Bottom Drawer - Now for Results only) -->
+    <div class="test-drawer" :class="{ expanded: isTestExpanded, fullscreen: isConfigCollapsed }">
+       <div class="drawer-handle" @click="toggleTest">
+          <div class="handle-left">
+              <svg class="drawer-icon" :class="{ rotated: isTestExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+              <span class="drawer-title">测试结果</span>
+          </div>
+          <div class="handle-actions">
+              <button 
+                class="icon-btn action-btn" 
+                @click.stop="isConfigCollapsed = !isConfigCollapsed"
+                :title="isConfigCollapsed ? '还原布局' : '全屏查看'"
+              >
+                <svg v-if="!isConfigCollapsed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                </svg>
+                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/>
+                </svg>
+              </button>
+          </div>
+       </div>
+       
+       <div class="drawer-content" v-show="isTestExpanded" ref="drawerContentRef" @scroll="handleScroll">
+          <div v-if="realContent || thinkContent || isTesting" class="test-result">
+             <div class="result-label-row">
+                <div class="result-label">AI 输出结果:</div>
+                <button class="copy-btn-xs" @click="copyResult" :title="isResultCopying ? '已复制' : '复制正文内容'">
+                   <svg v-if="!isResultCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                   </svg>
+                   <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                   </svg>
+                   {{ isResultCopying ? '已复制' : '复制正文' }}
+                </button>
+             </div>
+             <ThinkBlock :content="thinkContent" class="mb-4" />
              <div class="markdown-body" v-html="md.render(realContent)"></div>
+             <div v-if="isTesting && !realContent" class="loading-placeholder">
+                AI 正在思考并生成回复...
+             </div>
+          </div>
+          <div v-else class="empty-result">
+             暂无测试结果，点击“运行”开始测试
           </div>
        </div>
     </div>
@@ -394,8 +533,15 @@ const toggleTest = () => {
     background: #fff;
     display: flex;
     flex-direction: column;
-    max-height: 400px; /* Limit max height */
+    max-height: 400px; /* Default max height */
     transition: all 0.3s ease;
+}
+
+.test-drawer.fullscreen {
+    max-height: none;
+    flex: 1;
+    border-top: none;
+    overflow: hidden; /* Container doesn't scroll, content does */
 }
 
 .drawer-handle {
@@ -448,23 +594,178 @@ const toggleTest = () => {
 .drawer-content {
     padding: 16px;
     background: #fff;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .test-result {
-    margin-top: 12px;
-    padding: 12px;
-    background: #f3f4f6;
-    border-radius: 6px;
+    padding: 16px 20px;
+    background: #f9fafb;
+    border: 1px solid #f3f4f6;
+    border-radius: 8px;
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.6;
+}
+
+.empty-result {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #9ca3af;
     font-size: 13px;
-    color: #4b5563;
-    line-height: 1.5;
+    padding: 40px 0;
+}
+
+.loading-placeholder {
+    margin-top: 12px;
+    color: #3b82f6;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loading-placeholder::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border: 2px solid #3b82f6;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.handle-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.action-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+}
+
+.action-btn:hover {
+    background: #f1f5f9;
+    color: #3b82f6;
 }
 
 .result-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
+.result-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+:deep(.markdown-body) {
+    font-size: 14px;
+    background: transparent !important;
+    color: inherit;
+}
+
+.preview-section {
+    margin-bottom: 16px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.section-title {
     font-size: 11px;
     font-weight: 600;
     color: #9ca3af;
-    margin-bottom: 4px;
     text-transform: uppercase;
+}
+
+.copy-btn-xs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    font-size: 10px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.copy-btn-xs:hover {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.rendered-preview {
+    padding: 12px 16px;
+    background: #f9fafb;
+    border: 1px solid #f3f4f6;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #4b5563;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 140px;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.5;
+}
+
+.test-drawer.fullscreen {
+    flex: 1;
+    max-height: none;
+    overflow: hidden;
+    border-top: none;
+}
+
+.test-drawer.fullscreen .drawer-content {
+    flex: 1;
+    overflow-y: auto;
+    height: calc(100% - 40px); /* Subtract handle height */
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    color: #6b7280;
+    transition: all 0.2s;
+}
+
+.icon-btn:hover {
+    background-color: #e5e7eb;
+    color: #374151;
+}
+
+.restore-btn {
+    margin-right: 4px;
 }
 </style>

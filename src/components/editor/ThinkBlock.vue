@@ -2,23 +2,25 @@
 import { ref, computed } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { BrainCircuit, ChevronDown, ChevronUp } from 'lucide-vue-next'
-import 'github-markdown-css'
-
-const props = defineProps<{
-  content: string
-}>()
-
-const isExpanded = ref(true)
-
-const toggleExpand = () => {
-  isExpanded.value = !isExpanded.value
-}
 
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   breaks: true
 })
+
+const props = withDefaults(defineProps<{
+  content: string
+  scrollable?: boolean
+}>(), {
+  scrollable: false
+})
+
+const isExpanded = ref(true)
+
+const toggleExpand = () => {
+  isExpanded.value = !isExpanded.value
+}
 
 const htmlContent = computed(() => {
   return md.render(props.content)
@@ -36,11 +38,13 @@ const htmlContent = computed(() => {
         <component :is="isExpanded ? ChevronUp : ChevronDown" :size="16" />
       </button>
     </div>
-    <div v-show="isExpanded" class="think-content markdown-body" v-html="htmlContent"></div>
+    <div v-show="isExpanded" class="think-content markdown-body" :class="{ scrollable }" v-html="htmlContent"></div>
   </div>
 </template>
 
 <style scoped>
+@import "github-markdown-css/github-markdown.css";
+
 .think-block {
   margin: 0 0 16px 0;
   background: #f8fafc;
@@ -100,7 +104,11 @@ const htmlContent = computed(() => {
   font-size: 14px;
   line-height: 1.6;
   color: #475569;
-  /* Removed max-height and overflow-y to allow natural expansion */
+}
+
+.think-content.scrollable {
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 /* Markdown Styles */

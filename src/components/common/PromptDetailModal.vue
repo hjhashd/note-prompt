@@ -178,64 +178,68 @@ const getTagTone = (tag: string) => {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
   will-change: opacity;
 }
 
 .modal-container {
-  background: white;
+  background: var(--bg-surface);
   width: 90%;
   max-width: 800px;
-  max-height: 90vh;
-  border-radius: 8px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18);
+  max-height: 85vh;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
   position: relative;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   will-change: transform, opacity;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .close-btn {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 24px;
+  right: 24px;
   padding: 8px;
   border-radius: 50%;
   border: none;
-  background: transparent;
+  background: var(--bg-secondary);
   cursor: pointer;
-  color: #64748b;
+  color: var(--text-secondary);
   z-index: 10;
+  transition: all 0.2s ease;
 }
 
 .close-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transform: rotate(90deg);
 }
 
 .modal-content {
-  padding: 32px;
+  padding: 40px;
 }
 
 .prompt-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #0f172a;
-  margin-bottom: 16px;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+  letter-spacing: -0.02em;
 }
 
 .prompt-meta {
   display: flex;
   gap: 24px;
-  color: #64748b;
+  color: var(--text-secondary);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .author, .date {
@@ -245,14 +249,15 @@ const getTagTone = (tag: string) => {
 }
 
 .avatar {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: #f1f5f9;
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .avatar img {
@@ -265,57 +270,51 @@ const getTagTone = (tag: string) => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .tag {
-  font-size: 11px;
-  color: var(--gray-700);
-  background: var(--gray-100);
-  padding: 2px 8px;
-  border-radius: 100px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 4px 12px;
+  border-radius: 24px;
   font-weight: 500;
-  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .tag--blue {
-  color: #1d4ed8;
-  background: #eff6ff;
-  border-color: rgba(29, 78, 216, 0.18);
+  color: #1a73e8;
+  background: #e8f0fe;
 }
 
 .tag--purple {
-  color: #6d28d9;
-  background: #f5f3ff;
-  border-color: rgba(109, 40, 217, 0.18);
+  color: #a142f4;
+  background: #f3e8fd;
 }
 
 .tag--amber {
-  color: #b45309;
-  background: #fffbeb;
-  border-color: rgba(180, 83, 9, 0.18);
+  color: #e37400;
+  background: #fef7e0;
 }
 
 .tag--emerald {
-  color: #047857;
-  background: #ecfdf5;
-  border-color: rgba(4, 120, 87, 0.18);
+  color: #137333;
+  background: #e6f4ea;
 }
 
 .tag--gray {
-  color: var(--gray-600);
-  background: var(--gray-100);
-  border-color: rgba(15, 23, 42, 0.06);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
 }
 
 .prompt-stats {
   display: flex;
   gap: 24px;
-  padding: 16px 0;
-  border-top: 1px solid #e2e8f0;
-  border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 24px;
-  color: #64748b;
+  padding: 20px 0;
+  border-top: 1px solid var(--bg-secondary);
+  border-bottom: 1px solid var(--bg-secondary);
+  margin-bottom: 32px;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -328,18 +327,18 @@ const getTagTone = (tag: string) => {
 .stat.interactive {
   cursor: pointer;
   transition: all 0.2s ease;
-  padding: 4px 8px;
-  border-radius: 6px;
-  margin: -4px -8px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  margin: -6px -12px;
 }
 
 .stat.interactive:hover {
-  background: #fee2e2;
-  color: #ef4444;
+  background: #fff0f0;
+  color: #d93025;
 }
 
 .stat.interactive.is-active {
-  color: #ef4444;
+  color: #d93025;
 }
 
 .stat.interactive.is-active svg {
@@ -357,51 +356,53 @@ const getTagTone = (tag: string) => {
 }
 
 .content-section {
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .section-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .prompt-code {
-  background: #f8fafc;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  font-family: monospace;
+  background: var(--bg-primary);
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+  font-family: 'Fira Code', 'Roboto Mono', monospace;
   white-space: pre-wrap;
-  color: #334155;
-  line-height: 1.6;
-  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.7;
+  font-size: 15px;
 }
 
 .desc-section h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #334155;
-  margin-bottom: 8px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
 }
 
 .desc-section p {
-  color: #475569;
-  line-height: 1.6;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  font-size: 15px;
 }
 
 .loading-state {
-  padding: 60px;
+  padding: 80px;
   text-align: center;
-  color: #64748b;
+  color: var(--text-secondary);
+  font-size: 16px;
 }
 
 /* Transitions */
