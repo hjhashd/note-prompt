@@ -3,23 +3,111 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { testStream } from '@/api/lyf-ai'
 import MarkdownIt from 'markdown-it'
 import ThinkBlock from './ThinkBlock.vue'
+import SavePromptModal from './SavePromptModal.vue'
+import { copyToClipboard } from '@/utils/clipboard'
+import { Share2, Save } from 'lucide-vue-next'
+import { useChatStore } from '@/stores/chat'
+import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
   content: string
 }>()
 
+const chatStore = useChatStore()
+const { toast } = useToast()
 const model = ref('GPT-4 Turbo')
 const temperature = ref(0.6)
 
 const isVariableListCollapsed = ref(false)
-const testInput = ref('')
 const thinkContent = ref('')
 const realContent = ref('')
-const isTestExpanded = ref(false)
 const isTesting = ref(false)
-const isConfigCollapsed = ref(false)
 const drawerContentRef = ref<HTMLElement | null>(null)
 const shouldAutoScroll = ref(true)
+const showScrollButton = ref(false)
+const isUserScrolling = ref(false)
+
+// Save Modal State
+const showSaveModal = ref(false)
+const handleOpenSaveModal = () => {
+  showSaveModal.value = true
+}
+
+const handleSavePrompt = (data: any) => {
+  console.log('Saving prompt with data:', data)
+  // 保存成功后的回调，数据已经在SavePromptModal中处理
+  showSaveModal.value = false
+}
+
+const handlePromptSaved = (result: any) => {
+  // 保存成功后的处理
+  toast('提示词保存成功', 'success')
+
+  // 如果会话被收敛，刷新当前会话状态
+  if (result.session_status === 1) {
+    // 刷新会话列表
+    chatStore.loadSessions()
+  }
+
+  // 可以在这里添加其他成功后的逻辑，如跳转到提示词详情页等
+  console.log('Prompt saved successfully:', result)
+}
+
+// Output queue processing
+const tokenQueue: { type: 'thinking' | 'answer', text: string }[] = []
+let isProcessingQueue = false
+let lastRenderTime = 0
+const RENDER_INTERVAL = 16 // ~60fps
+
+const thinkBlockRef = ref<InstanceType<typeof ThinkBlock> | null>(null)
+
+const processQueue = () => {
+  if (tokenQueue.length === 0) {
+    isProcessingQueue = false
+    
+    // Check if we should collapse thinking block
+    if (!isTesting.value && thinkContent.value) {
+      setTimeout(() => {
+        thinkBlockRef.value?.collapse()
+      }, 200)
+    }
+    return
+  }
+
+  isProcessingQueue = true
+  const now = performance.now()
+  
+  if (now - lastRenderTime >= RENDER_INTERVAL) {
+    // Process tokens
+    // If buffer is too large (>500 chars), process more tokens to catch up
+    const bufferSize = tokenQueue.reduce((acc, item) => acc + item.text.length, 0)
+    const chunkSize = bufferSize > 500 ? 50 : 2 // Dynamic chunk size
+    
+    let processedCount = 0
+    while (tokenQueue.length > 0 && processedCount < chunkSize) {
+      const item = tokenQueue.shift()!
+      if (item.type === 'thinking') {
+        thinkContent.value += item.text
+      } else {
+        realContent.value += item.text
+      }
+      processedCount++
+    }
+    
+    lastRenderTime = now
+    scrollToBottom()
+  }
+
+  requestAnimationFrame(processQueue)
+}
+
+watch(isTesting, (newVal) => {
+  if (!newVal && thinkContent.value) {
+    setTimeout(() => {
+      thinkBlockRef.value?.collapse()
+    }, 500)
+  }
+})
 
 // 计算替换后的完整提示词
 const renderedPrompt = computed(() => {
@@ -34,14 +122,12 @@ const renderedPrompt = computed(() => {
 // 复制提示词
 const isCopying = ref(false)
 const copyPrompt = async () => {
-  try {
-    await navigator.clipboard.writeText(renderedPrompt.value)
+  const success = await copyToClipboard(renderedPrompt.value)
+  if (success) {
     isCopying.value = true
     setTimeout(() => {
       isCopying.value = false
     }, 2000)
-  } catch (err) {
-    console.error('Failed to copy:', err)
   }
 }
 
@@ -58,14 +144,12 @@ const variableValues = ref<Record<string, string>>({})
 // 复制 AI 输出内容 (排除思考内容)
 const isResultCopying = ref(false)
 const copyResult = async () => {
-  try {
-    await navigator.clipboard.writeText(realContent.value)
+  const success = await copyToClipboard(realContent.value)
+  if (success) {
     isResultCopying.value = true
     setTimeout(() => {
       isResultCopying.value = false
     }, 2000)
-  } catch (err) {
-    console.error('Failed to copy result:', err)
   }
 }
 
@@ -90,21 +174,54 @@ const emit = defineEmits<{
   (e: 'run-test', input: string): void
 }>()
 
-const scrollToBottom = async () => {
-    if (!drawerContentRef.value || !shouldAutoScroll.value) return
-    
+const scrollToBottom = async (force = false) => {
     await nextTick()
-    const el = drawerContentRef.value
-    el.scrollTop = el.scrollHeight
+    if (drawerContentRef.value) {
+        const el = drawerContentRef.value
+        
+        // If forced (button click) or auto-scroll is enabled
+        if (force || shouldAutoScroll.value) {
+            // Use smooth behavior only for manual clicks or large jumps
+            if (force) {
+                el.scrollTo({
+                    top: el.scrollHeight,
+                    behavior: 'smooth'
+                })
+                // Reset states after forced scroll
+                shouldAutoScroll.value = true
+                showScrollButton.value = false
+            } else {
+                el.scrollTop = el.scrollHeight
+            }
+        } else {
+            // If auto-scroll is disabled, show button if new content is pending
+            if (isTesting.value || tokenQueue.length > 0) {
+                showScrollButton.value = true
+            }
+        }
+    }
 }
 
 const handleScroll = () => {
     if (!drawerContentRef.value) return
     const el = drawerContentRef.value
-    // If user scrolls up (is not at bottom), disable auto-scroll
-    // 20px threshold to be forgiving
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20
-    shouldAutoScroll.value = isAtBottom
+    const { scrollTop, scrollHeight, clientHeight } = el
+    
+    // Check if user is at the bottom (threshold 50px)
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    
+    if (isAtBottom) {
+        shouldAutoScroll.value = true
+        showScrollButton.value = false
+    } else {
+        // If user scrolls up, disable auto-scroll
+        shouldAutoScroll.value = false
+        
+        // Show button if we are generating content or if there is new content pending
+        if (isTesting.value || tokenQueue.length > 0) {
+            showScrollButton.value = true
+        }
+    }
 }
 
 const runTest = async () => {
@@ -116,70 +233,124 @@ const runTest = async () => {
   
   // Start real test
   isTesting.value = true
+  
   thinkContent.value = ''
   realContent.value = ''
   let fullResponse = ''
   
-  isTestExpanded.value = true // Auto expand
-  isConfigCollapsed.value = true // Auto collapse config
   shouldAutoScroll.value = true // Reset auto-scroll
   
   await testStream(
     {
       system_prompt: preview,
-      user_input: testInput.value || '你好' // Default input if empty
+      user_input: '你好'
     },
     (chunk) => {
+      // Logic to separate think/content and push to queue
+      // Note: This is a simplified stream parser. 
+      // Ideally, the stream itself should distinguish types.
+      // Here we parse incrementally.
+      
+      const prevFull = fullResponse
       fullResponse += chunk
       
-      // Parse think content
+      // Simple incremental parser for <think> tags
+      // We compare previous state vs new state to determine what to append
+      
+      // Check for think tags
       const thinkStart = fullResponse.indexOf('<think>')
       const thinkEnd = fullResponse.indexOf('</think>')
       
-      if (thinkStart !== -1) {
-        const preThink = fullResponse.substring(0, thinkStart)
-        if (thinkEnd !== -1) {
-           thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
-           realContent.value = preThink + fullResponse.substring(thinkEnd + 8).trimStart()
+      let newContent = ''
+      let type: 'thinking' | 'answer' = 'answer'
+      
+      // Case 1: No think tags yet
+      if (thinkStart === -1) {
+        newContent = chunk
+        type = 'answer'
+      }
+      // Case 2: Inside think block
+      else if (thinkEnd === -1) {
+        // Just entered think block or inside it
+        if (prevFull.indexOf('<think>') === -1) {
+             // Just started thinking
+             const preThink = fullResponse.substring(0, thinkStart)
+             const thinkPart = fullResponse.substring(thinkStart + 7)
+             
+             if (preThink.length > prevFull.length) {
+                // Some pre-think content was added
+                tokenQueue.push({ type: 'answer', text: preThink.substring(prevFull.length) })
+             }
+             newContent = thinkPart
+             type = 'thinking'
         } else {
-           thinkContent.value = fullResponse.substring(thinkStart + 7)
-           realContent.value = preThink
+             // Already inside
+             newContent = chunk
+             type = 'thinking'
         }
-      } else {
-        realContent.value = fullResponse
+      }
+      // Case 3: Think block finished
+      else {
+        // Just finished or already finished
+        if (prevFull.indexOf('</think>') === -1) {
+            // Just finished
+            const currentThink = fullResponse.substring(thinkStart + 7, thinkEnd)
+            const currentReal = fullResponse.substring(0, thinkStart) + fullResponse.substring(thinkEnd + 8).trimStart()
+            
+            if (chunk.includes('</think>')) {
+                 const parts = chunk.split('</think>')
+                 tokenQueue.push({ type: 'thinking', text: parts[0] })
+                 if (parts[1]) tokenQueue.push({ type: 'answer', text: parts[1] })
+            } else {
+                 // We are past think block
+                 newContent = chunk
+                 type = 'answer'
+            }
+        } else {
+            // Fully past think block
+            newContent = chunk
+            type = 'answer'
+        }
       }
       
-      scrollToBottom()
+      // Push to queue if simple append
+      if (newContent) {
+          tokenQueue.push({ type, text: newContent })
+      }
+      
+      if (!isProcessingQueue) {
+          processQueue()
+      }
     },
     () => {
       isTesting.value = false
     },
     (err) => {
       console.error(err)
-      realContent.value += `\n[Error: ${err.message || 'Unknown error'}]`
+      tokenQueue.push({ type: 'answer', text: `\n[Error: ${err.message || 'Unknown error'}]` })
+      if (!isProcessingQueue) processQueue()
       isTesting.value = false
       scrollToBottom()
     }
   )
 }
-
-const toggleTest = () => {
-    // 如果已经展开，则隐藏 (收起)
-    if (isTestExpanded.value) {
-        isTestExpanded.value = false
-        isConfigCollapsed.value = false
-    } else {
-        // 如果隐藏，则展开并全屏 (铺满全屏)
-        isTestExpanded.value = true
-        isConfigCollapsed.value = true
-    }
-}
 </script>
 
 <template>
   <div class="tools-panel">
+    <!-- Header -->
     <div class="tools-header">
-      <div class="tools-title">属性面板</div>
+      <div class="header-title">配置与预览</div>
+      <div class="header-actions">
+        <button class="tool-action-btn" title="分享">
+           <Share2 :size="16" />
+           <span>分享</span>
+        </button>
+        <button class="tool-action-btn primary" title="保存" @click="handleOpenSaveModal">
+           <Save :size="16" />
+           <span>保存</span>
+        </button>
+      </div>
       <button class="tools-close" @click="emit('close')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M18 6L6 18M6 6l12 12"/>
@@ -187,155 +358,174 @@ const toggleTest = () => {
       </button>
     </div>
 
-    <div class="tools-content" v-show="!isConfigCollapsed">
-      <!-- 1. Model & Parameters (Compact) -->
-      <div class="config-group">
-        <div class="group-header">模型配置</div>
-        <div class="control-row">
-            <select v-model="model" class="ide-input model-select">
-                <option>GPT-4 Turbo</option>
-                <option>GPT-3.5 Turbo</option>
-                <option>Claude 3 Opus</option>
-                <option>Gemini Pro</option>
-            </select>
-        </div>
-        <div class="control-row flex-center">
-            <label class="param-label">Temp: {{ temperature }}</label>
-            <input 
-                type="range" 
-                v-model.number="temperature" 
-                min="0" 
-                max="1" 
-                step="0.1" 
-                class="ide-slider"
+    <!-- Main Content (Single Scrollable Area) -->
+    <div class="tools-content" ref="drawerContentRef" @scroll="handleScroll">
+      <!-- 1. Config Section -->
+      <div class="config-section">
+          <!-- 1.1 Model & Parameters -->
+          <div class="config-group">
+            <div class="group-header">模型配置</div>
+            <div class="control-row">
+                <select v-model="model" class="ide-input model-select">
+                    <option>GPT-4 Turbo</option>
+                    <option>GPT-3.5 Turbo</option>
+                    <option>Claude 3 Opus</option>
+                    <option>Gemini Pro</option>
+                </select>
+            </div>
+            <div class="control-row flex-center">
+                <label class="param-label">Temp: {{ temperature }}</label>
+                <input 
+                    type="range" 
+                    v-model.number="temperature" 
+                    min="0" 
+                    max="1" 
+                    step="0.1" 
+                    class="ide-slider"
+                >
+            </div>
+          </div>
+
+          <!-- 1.2 Variables -->
+          <div class="config-group">
+            <div 
+                class="group-header clickable" 
+                @click="isVariableListCollapsed = !isVariableListCollapsed"
             >
-        </div>
+                 <span>变量表 ({{ detectedVariables.length }})</span>
+                 <svg class="toggle-icon" :class="{ rotated: isVariableListCollapsed }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                 </svg>
+            </div>
+            
+            <div class="variable-grid" v-show="!isVariableListCollapsed">
+               <div class="grid-header">
+                 <span class="col-name">变量名</span>
+                 <span class="col-val">测试值</span>
+               </div>
+               <div v-if="detectedVariables.length === 0" class="empty-vars">
+                 未检测到变量 (使用 <code v-pre>{{var}}</code>)
+               </div>
+               <div v-for="v in detectedVariables" :key="v" class="grid-row">
+                  <div class="var-name" :title="'{{' + v + '}}'">{{ v }}</div>
+                  <div class="var-val-wrapper">
+                      <input type="text" v-model="variableValues[v]" class="ide-input compact" :placeholder="'输入 ' + v + '...'">
+                  </div>
+               </div>
+            </div>
+          </div>
+
+          <!-- 1.3 Quick Test -->
+          <div class="config-group">
+            <div class="group-header">
+              <span>快速测试</span>
+              <button class="run-btn-sm" @click.stop="runTest" :disabled="isTesting">
+                <svg v-if="!isTesting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                {{ isTesting ? '运行中...' : '运行' }}
+              </button>
+            </div>
+
+            <div class="preview-section">
+               <div class="section-header">
+                  <span class="section-title">生成的提示词 (已替换变量)</span>
+                  <button class="copy-btn-xs" @click="copyPrompt" :title="isCopying ? '已复制' : '复制完整提示词'">
+                     <svg v-if="!isCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                     </svg>
+                     <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                     </svg>
+                     {{ isCopying ? '已复制' : '复制' }}
+                  </button>
+               </div>
+               <div class="rendered-preview">
+                  {{ renderedPrompt }}
+               </div>
+            </div>
+
+            <!-- Removed Test Input Section -->
+          </div>
       </div>
 
-      <!-- 2. Variables (Table/Grid) -->
-      <div class="config-group">
-        <div 
-            class="group-header clickable" 
-            @click="isVariableListCollapsed = !isVariableListCollapsed"
-        >
-             <span>变量表 ({{ detectedVariables.length }})</span>
-             <svg class="toggle-icon" :class="{ rotated: isVariableListCollapsed }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="6 9 12 15 18 9"></polyline>
-             </svg>
-        </div>
-        
-        <div class="variable-grid" v-show="!isVariableListCollapsed">
-           <div class="grid-header">
-             <span class="col-name">变量名</span>
-             <span class="col-val">测试值</span>
-           </div>
-           <div v-if="detectedVariables.length === 0" class="empty-vars">
-             未检测到变量 (使用 \{{var}})
-           </div>
-           <div v-for="v in detectedVariables" :key="v" class="grid-row">
-              <div class="var-name" :title="'{{' + v + '}}'">{{ v }}</div>
-              <div class="var-val-wrapper">
-                  <input type="text" v-model="variableValues[v]" class="ide-input compact" :placeholder="'输入 ' + v + '...'">
-              </div>
-           </div>
-        </div>
-      </div>
+      <!-- Divider -->
+      <div class="section-divider"></div>
 
-      <!-- 3. Quick Test (Inputs moved here) -->
-      <div class="config-group">
-        <div class="group-header">
-          <span>快速测试</span>
-          <button class="run-btn-sm" @click.stop="runTest" :disabled="isTesting">
-            <svg v-if="!isTesting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-            {{ isTesting ? '运行中...' : '运行' }}
-          </button>
-        </div>
-
-        <div class="preview-section">
-           <div class="section-header">
-              <span class="section-title">生成的提示词 (已替换变量)</span>
-              <button class="copy-btn-xs" @click="copyPrompt" :title="isCopying ? '已复制' : '复制完整提示词'">
-                 <svg v-if="!isCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <!-- 2. Result Section -->
+      <div class="result-section">
+        <div v-if="realContent || thinkContent || isTesting" class="test-result">
+            <div class="result-actions">
+                <div class="result-label">AI 输出结果</div>
+                <button class="copy-btn-xs" @click="copyResult" :title="isResultCopying ? '已复制' : '复制正文内容'">
+                    <svg v-if="!isResultCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                 </svg>
-                 <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    </svg>
+                    <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="20 6 9 17 4 12"></polyline>
-                 </svg>
-                 {{ isCopying ? '已复制' : '复制' }}
-              </button>
-           </div>
-           <div class="rendered-preview">
-              {{ renderedPrompt }}
-           </div>
-        </div>
+                    </svg>
+                    {{ isResultCopying ? '已复制' : '复制' }}
+                </button>
+            </div>
 
-        <div class="test-input-section">
-          <div class="section-header">
-             <span class="section-title">AI 测试 (输入 User 内容)</span>
-          </div>
-          <textarea 
-            class="ide-input area" 
-            v-model="testInput" 
-            placeholder="输入测试内容 (例如: '开始撰写' 或 '你好')..."
-          ></textarea>
+            <ThinkBlock ref="thinkBlockRef" :content="thinkContent" class="mb-4" />
+            
+            <div class="markdown-body output-content" v-html="md.render(realContent)"></div>
+            
+            <!-- Exquisite Loading State -->
+            <div v-if="isTesting && !realContent && !thinkContent" class="loading-container">
+                <div class="ai-loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-core"></div>
+                </div>
+                <div class="loading-text-anim">
+                    AI 正在思考中
+                    <span class="dot">.</span>
+                    <span class="dot">.</span>
+                    <span class="dot">.</span>
+                </div>
+            </div>
+        </div>
+        <div v-else class="empty-result">
+            <div class="empty-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" stroke-width="1.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+            </div>
+            <div class="empty-text">暂无测试结果</div>
+            <button class="run-btn-lg" @click="runTest" :disabled="isTesting">
+                立即运行
+            </button>
         </div>
       </div>
     </div>
 
-    <!-- 4. Test Area (Bottom Drawer - Now for Results only) -->
-    <div class="test-drawer" :class="{ expanded: isTestExpanded, fullscreen: isConfigCollapsed }">
-       <div class="drawer-handle" @click="toggleTest">
-          <div class="handle-left">
-              <svg class="drawer-icon" :class="{ rotated: isTestExpanded }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="18 15 12 9 6 15"></polyline>
-              </svg>
-              <span class="drawer-title">测试结果</span>
-          </div>
-          <div class="handle-actions">
-              <button 
-                class="icon-btn action-btn" 
-                @click.stop="isConfigCollapsed = !isConfigCollapsed"
-                :title="isConfigCollapsed ? '还原布局' : '全屏查看'"
-              >
-                <svg v-if="!isConfigCollapsed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                </svg>
-                <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/>
-                </svg>
-              </button>
-          </div>
-       </div>
-       
-       <div class="drawer-content" v-show="isTestExpanded" ref="drawerContentRef" @scroll="handleScroll">
-          <div v-if="realContent || thinkContent || isTesting" class="test-result">
-             <div class="result-label-row">
-                <div class="result-label">AI 输出结果:</div>
-                <button class="copy-btn-xs" @click="copyResult" :title="isResultCopying ? '已复制' : '复制正文内容'">
-                   <svg v-if="!isResultCopying" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                   </svg>
-                   <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                   </svg>
-                   {{ isResultCopying ? '已复制' : '复制正文' }}
-                </button>
-             </div>
-             <ThinkBlock :content="thinkContent" class="mb-4" />
-             <div class="markdown-body" v-html="md.render(realContent)"></div>
-             <div v-if="isTesting && !realContent" class="loading-placeholder">
-                AI 正在思考并生成回复...
-             </div>
-          </div>
-          <div v-else class="empty-result">
-             暂无测试结果，点击“运行”开始测试
-          </div>
-       </div>
-    </div>
+    <!-- Scroll to Bottom Button -->
+    <Transition name="fade-slide">
+      <button 
+        v-if="showScrollButton" 
+        class="scroll-bottom-btn"
+        @click="scrollToBottom(true)"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M19 12l-7 7-7-7"/>
+        </svg>
+        <span>新内容生成中</span>
+      </button>
+    </Transition>
+
+    <!-- Save Prompt Modal -->
+    <SavePromptModal
+      v-model:visible="showSaveModal"
+      :initial-title="chatStore.currentSessionTitle"
+      :messages="chatStore.messages"
+      :prompt-content="content"
+      :session-id="chatStore.currentSessionId"
+      @save="handleSavePrompt"
+      @saved="handlePromptSaved"
+    />
   </div>
 </template>
 
@@ -347,21 +537,62 @@ const toggleTest = () => {
   flex-direction: column;
   background: #fff;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  position: relative;
 }
 
 .tools-header {
   height: 48px;
-  padding: 0 16px;
+  padding: 0 8px 0 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* justify-content: space-between; Removed to allow margin-auto to work properly */
   border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  flex-shrink: 0;
 }
 
-.tools-title {
+.header-title {
   font-size: 14px;
   font-weight: 600;
-  color: #374151; /* gray-700 */
+  color: #374151;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 12px;
+  margin-left: auto; /* Push to right before close button */
+}
+
+.tool-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-action-btn:hover {
+  background: #f9fafb;
+  border-color: #3b82f6; /* blue-500 */
+  color: #3b82f6;
+}
+
+.tool-action-btn.primary {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.tool-action-btn.primary:hover {
+  background: #2563eb; /* blue-600 */
 }
 
 .tools-close {
@@ -369,12 +600,33 @@ const toggleTest = () => {
   border: none;
   color: #9ca3af;
   cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.tools-close:hover {
+    background: #f3f4f6;
+    color: #4b5563;
 }
 
 .tools-content {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+}
+
+.config-section {
+    flex-shrink: 0;
+}
+
+.section-divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 24px 0;
+}
+
+.result-section {
+    min-height: 200px; /* Ensure visibility */
 }
 
 /* Config Groups */
@@ -441,7 +693,6 @@ const toggleTest = () => {
 
 .model-select {
     cursor: pointer;
-    /* Custom arrow could be added here */
 }
 
 .param-label {
@@ -527,245 +778,273 @@ const toggleTest = () => {
     transform: rotate(-90deg);
 }
 
-/* Test Drawer */
-.test-drawer {
-    border-top: 1px solid #e5e7eb;
-    background: #fff;
-    display: flex;
-    flex-direction: column;
-    max-height: 400px; /* Default max height */
-    transition: all 0.3s ease;
-}
-
-.test-drawer.fullscreen {
-    max-height: none;
-    flex: 1;
-    border-top: none;
-    overflow: hidden; /* Container doesn't scroll, content does */
-}
-
-.drawer-handle {
-    height: 40px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    background: #f9fafb;
-    border-bottom: 1px solid transparent;
-}
-.test-drawer.expanded .drawer-handle {
-    border-bottom-color: #e5e7eb;
-}
-
-.handle-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #374151;
-}
-
-.drawer-icon {
-    transition: transform 0.2s;
-}
-.drawer-icon.rotated {
-    transform: rotate(180deg);
-}
-
+/* Run Button */
 .run-btn-sm {
-    padding: 4px 12px;
-    background: #3b82f6;
-    color: white;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #2563eb;
+    color: #fff;
     border: none;
+    padding: 6px 12px;
     border-radius: 4px;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.run-btn-sm:hover {
-    background: #2563eb;
+    transition: background 0.2s;
 }
 
-.drawer-content {
-    padding: 16px;
-    background: #fff;
-    flex: 1;
-    overflow-y: auto;
+.run-btn-sm:hover:not(:disabled) {
+    background: #1d4ed8;
 }
 
-.test-result {
-    padding: 16px 20px;
-    background: #f9fafb;
-    border: 1px solid #f3f4f6;
-    border-radius: 8px;
-    font-size: 14px;
-    color: #374151;
-    line-height: 1.6;
+.run-btn-sm:disabled {
+    background: #93c5fd;
+    cursor: not-allowed;
 }
 
-.empty-result {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: #9ca3af;
-    font-size: 13px;
-    padding: 40px 0;
-}
-
-.loading-placeholder {
-    margin-top: 12px;
-    color: #3b82f6;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.loading-placeholder::before {
-    content: "";
-    width: 14px;
-    height: 14px;
-    border: 2px solid #3b82f6;
-    border-top-color: transparent;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-.handle-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.action-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #64748b;
-}
-
-.action-btn:hover {
-    background: #f1f5f9;
-    color: #3b82f6;
-}
-
-.result-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: #6b7280;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-}
-
-.result-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-}
-
-:deep(.markdown-body) {
-    font-size: 14px;
-    background: transparent !important;
-    color: inherit;
-}
-
+/* Preview Section */
 .preview-section {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
     margin-bottom: 16px;
 }
 
 .section-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 8px;
 }
 
 .section-title {
     font-size: 11px;
     font-weight: 600;
-    color: #9ca3af;
+    color: #6b7280;
     text-transform: uppercase;
 }
 
 .copy-btn-xs {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 6px;
-    background: #f3f4f6;
+    background: none;
     border: 1px solid #e5e7eb;
     border-radius: 4px;
+    padding: 2px 6px;
     font-size: 10px;
     color: #6b7280;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff;
     transition: all 0.2s;
 }
 
 .copy-btn-xs:hover {
-    background: #e5e7eb;
+    border-color: #d1d5db;
     color: #374151;
 }
 
 .rendered-preview {
-    padding: 12px 16px;
-    background: #f9fafb;
-    border: 1px solid #f3f4f6;
-    border-radius: 8px;
-    font-size: 13px;
-    color: #4b5563;
+    font-family: monospace;
+    font-size: 12px;
+    color: #374151;
     white-space: pre-wrap;
     word-break: break-all;
-    max-height: 140px;
+    max-height: 400px;
     overflow-y: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    line-height: 1.5;
 }
 
-.test-drawer.fullscreen {
-    flex: 1;
-    max-height: none;
-    overflow: hidden;
-    border-top: none;
+/* Result View Styles */
+.test-result {
+    display: flex;
+    flex-direction: column;
 }
 
-.test-drawer.fullscreen .drawer-content {
-    flex: 1;
-    overflow-y: auto;
-    height: calc(100% - 40px); /* Subtract handle height */
-}
-
-.icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+.result-actions {
     display: flex;
     align-items: center;
-    color: #6b7280;
-    transition: all 0.2s;
+    justify-content: space-between;
+    margin-bottom: 16px;
 }
 
-.icon-btn:hover {
-    background-color: #e5e7eb;
+.back-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+}
+
+.back-btn:hover {
     color: #374151;
 }
 
-.restore-btn {
-    margin-right: 4px;
+.result-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.output-content {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #374151;
+    will-change: transform; /* Hardware acceleration */
+}
+
+/* Exquisite Loading State */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    gap: 16px;
+}
+
+.ai-loader {
+    position: relative;
+    width: 48px;
+    height: 48px;
+}
+
+.loader-ring {
+    position: absolute;
+    inset: 0;
+    border: 3px solid #e5e7eb;
+    border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loader-core {
+    position: absolute;
+    inset: 12px;
+    background: #2563eb;
+    border-radius: 50%;
+    animation: pulse-core 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-core {
+    0% { transform: scale(0.8); opacity: 0.8; }
+    50% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.8); opacity: 0.8; }
+}
+
+.loading-text-anim {
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.dot {
+    display: inline-block;
+    animation: dot-bounce 1.4s infinite ease-in-out both;
+}
+
+.dot:nth-child(1) { animation-delay: -0.32s; }
+.dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes dot-bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+}
+
+/* Empty State */
+.empty-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 200px;
+    color: #9ca3af;
+    gap: 16px;
+    padding-top: 20px;
+}
+
+.empty-text {
+    font-size: 14px;
+}
+
+.run-btn-lg {
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.run-btn-lg:hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+}
+
+.run-btn-lg:active {
+    transform: translateY(0);
+}
+
+:deep(.markdown-body) {
+    font-size: 14px;
+    background-color: transparent;
+}
+:deep(.markdown-body pre) {
+    background-color: #f6f8fa;
+    border-radius: 6px;
+}
+
+.scroll-bottom-btn {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s;
+}
+
+.scroll-bottom-btn:hover {
+  background: #f9fafb;
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(10px);
 }
 </style>

@@ -11,10 +11,10 @@
     --text-tertiary: #9CA3AF;
     --text-inverse: #FFFFFF;
     
-    /* Accent Colors - Google Blue Style */
-    --primary: #1A73E8;       /* Google Blue */
-    --primary-hover: #1557B0;
-    --primary-light: #E8F0FE; /* Active state background */
+    /* Accent Colors - Custom Blue */
+    --primary: #3B82F6;       
+    --primary-hover: #2563EB;
+    --primary-light: #EFF6FF; /* Active state background */
     
     /* NotebookLM Gradients / Accents */
     --gradient-1: linear-gradient(135deg, #E2E8F0 0%, #F8FAFC 100%);

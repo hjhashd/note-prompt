@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
-  ChevronLeft,
+  PanelLeft,
   Home, 
   FolderOpen, 
   Heart, 
@@ -59,10 +59,17 @@ const routeMap: Record<string, string> = {
   favorites: '/favorites',
   profile: '/profile',
   admin: '/admin',
+  studio: '/studio' // Map studio route
 }
 
 const syncActiveFromRoute = () => {
   const currentPath = route.path
+  // Special handling for studio to highlight 'my-prompts'
+  if (currentPath === '/studio') {
+    activeNav.value = 'my-prompts'
+    return
+  }
+  
   const matched = Object.entries(routeMap).find(([, path]) => path === currentPath)
   activeNav.value = matched ? matched[0] : 'home'
 }
@@ -83,7 +90,7 @@ watch(
 )
 
 const navItems = [
-  { id: 'home', label: '公共文件夹', icon: FolderOpen },
+  { id: 'home', label: '提示词广场', icon: FolderOpen },
   { id: 'my-prompts', label: '我的提示词', icon: Home },
   { id: 'favorites', label: '我的收藏', icon: Heart },
   { id: 'profile', label: '个人中心', icon: User },
@@ -95,27 +102,29 @@ const navItems = [
   <aside class="sidebar" :class="{ collapsed: props.collapsed }" id="sidebar">
     <!-- Header / Logo -->
     <div class="sidebar-header">
-      <div class="logo-container">
-        <div class="logo-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-          </svg>
+      <transition name="fade">
+        <div class="logo-container" v-if="!props.collapsed">
+          <div class="logo-icon">
+            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="40" cy="40" r="37" fill="#3B82F6"/>
+              <path d="M25 25L41 40L25 55" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M47 48H58" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="51" cy="32" r="2.5" fill="#FFFFFF"/>
+            </svg>
+          </div>
+          <span class="logo-text">提示词平台</span>
         </div>
-        <transition name="fade">
-          <span class="logo-text" v-if="!props.collapsed">NotePrompt</span>
-        </transition>
-      </div>
+      </transition>
+      
+      <button 
+        class="sidebar-toggle" 
+        @click="emit('toggle')" 
+        :class="{ collapsed: props.collapsed }"
+        :title="props.collapsed ? '展开侧边栏' : '收起侧边栏'"
+      >
+        <PanelLeft :size="20" class="toggle-icon" />
+      </button>
     </div>
-
-    <!-- Toggle Button (Floating on Border) -->
-    <button 
-      class="sidebar-toggle-floating" 
-      @click="emit('toggle')" 
-      :class="{ collapsed: props.collapsed }"
-      :title="props.collapsed ? '展开侧边栏' : '收起侧边栏'"
-    >
-      <ChevronLeft :size="16" class="toggle-icon" />
-    </button>
 
     <!-- Navigation -->
     <nav class="sidebar-nav">
@@ -174,8 +183,8 @@ const navItems = [
   flex-direction: column;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 50;
-  background: var(--bg-surface);
-  border-right: 1px solid rgba(0, 0, 0, 0.05);
+  background: var(--bg-primary);
+  border-right: 1px solid rgba(0, 0, 0, 0.04);
   padding: 16px;
 }
 
@@ -183,22 +192,41 @@ const navItems = [
   width: var(--sidebar-width-collapsed);
 }
 
+/* Border highlight effect (Permanently visible) */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--primary-500);
+  opacity: 0.12;
+  transition: opacity 0.3s ease;
+  z-index: 101;
+  pointer-events: none;
+}
+
+.sidebar:hover::before {
+  opacity: 0.25;
+}
+
 /* Header */
 .sidebar-header {
-  height: 64px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
-  margin-bottom: 32px;
+  padding: 0 4px;
+  margin-bottom: 24px;
   overflow: hidden;
+  transition: all 0.3s ease;
 }
 
 .sidebar.collapsed .sidebar-header {
   justify-content: center;
-  flex-direction: column;
-  gap: 16px;
   padding: 0;
+  margin-bottom: 24px;
 }
 
 .logo-container {
@@ -207,107 +235,58 @@ const navItems = [
   gap: 12px;
   overflow: hidden;
   white-space: nowrap;
+  flex: 1;
 }
 
 .logo-icon {
-  width: 32px;
-  height: 32px;
-  background: var(--text-primary);
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--bg-surface);
   flex-shrink: 0;
 }
 
 .logo-icon svg {
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
 }
 
 .logo-text {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
-/* Floating Toggle Button */
-.sidebar-toggle-floating {
-  position: absolute;
-  right: -12px;
-  top: 48px;
-  width: 24px;
-  height: 24px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
+/* Sidebar Toggle */
+.sidebar-toggle {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  z-index: 100;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
   color: var(--text-secondary);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-/* Hitbox to make it easier to hover */
-.sidebar::after {
-  content: '';
-  position: absolute;
-  right: -10px;
-  top: 0;
-  bottom: 0;
-  width: 20px;
-  z-index: 99;
-}
-
-.sidebar:hover .sidebar-toggle-floating,
-.sidebar-toggle-floating:hover {
-  opacity: 1;
-}
-
-.sidebar-toggle-floating:hover {
-  background: var(--primary);
-  color: white;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 4px var(--primary-light), 0 4px 12px rgba(26, 115, 232, 0.2);
-  transform: scale(1.15);
+.sidebar-toggle:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .toggle-icon {
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.sidebar-toggle-floating.collapsed .toggle-icon {
-  transform: rotate(180deg);
-}
-
-.sidebar-toggle-floating.collapsed {
-  opacity: 1;
-}
-
-/* Border highlight effect on hover */
-.sidebar::before {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--primary);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 101;
-  pointer-events: none;
-}
-
-.sidebar:hover::before {
-  opacity: 0.1;
+.sidebar.collapsed .sidebar-toggle {
+  width: 40px;
+  height: 40px;
 }
 
 /* Navigation */
@@ -349,7 +328,7 @@ const navItems = [
 }
 
 .nav-item:hover {
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
   color: var(--text-primary);
 }
 
@@ -392,11 +371,11 @@ const navItems = [
 }
 
 .user-profile:hover {
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
 }
 
 .user-profile.active {
-  background: var(--bg-primary);
+  background: var(--bg-secondary);
 }
 
 .sidebar.collapsed .user-profile {
@@ -410,8 +389,8 @@ const navItems = [
 .avatar {
   width: 32px;
   height: 32px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: var(--primary);
+  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -484,19 +463,7 @@ const navItems = [
 
 /* Responsive Adjustments */
 @media (max-width: 768px) {
-  .sidebar-toggle-floating {
-    width: 32px;
-    height: 32px;
-    right: -16px;
-    opacity: 1; /* Always show on mobile for better accessibility */
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-  
-  .sidebar-toggle-floating.collapsed {
-    right: -16px;
-  }
+  /* You can add mobile-specific styles for .sidebar-toggle here if needed */
 }
 
 /* Transitions */

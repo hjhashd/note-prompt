@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import Sidebar from '@/components/layout/Sidebar.vue'
 import { 
   Search, 
   Heart, 
@@ -11,13 +10,8 @@ import {
   FolderHeart
 } from 'lucide-vue-next'
 
-const isSidebarCollapsed = ref(false)
 const searchQuery = ref('')
 const activeSort = ref('newest')
-
-const toggleSidebar = () => {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-}
 
 // Mock Data for Favorited Prompts
 const favoritePrompts = ref([
@@ -31,7 +25,7 @@ const favoritePrompts = ref([
     tags: ['AI Art', 'Midjourney', 'Design'],
     category: 'design',
     icon: Zap,
-    color: 'indigo',
+    color: 'blue',
     favoritedAt: '2024-01-15'
   },
   {
@@ -72,7 +66,6 @@ const getIconColor = (color: string) => {
   const colors: Record<string, string> = {
     blue: 'text-blue-600 bg-blue-50',
     purple: 'text-purple-600 bg-purple-50',
-    indigo: 'text-indigo-600 bg-indigo-50',
     green: 'text-emerald-600 bg-emerald-50',
     orange: 'text-orange-600 bg-orange-50',
     cyan: 'text-cyan-600 bg-cyan-50'
@@ -104,138 +97,113 @@ const removeFavorite = (id: number) => {
 </script>
 
 <template>
-  <div class="app-layout">
-    <Sidebar :collapsed="isSidebarCollapsed" @toggle="toggleSidebar" />
+  <div class="content-body">
+    <div class="content-container">
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="header-content">
+          <h1 class="page-title">我的收藏</h1>
+          <p class="page-desc">这里保存了你收藏的所有优质提示词模板。</p>
+        </div>
+        <div class="header-stats">
+          <span class="stat-badge">
+            <Heart class="w-4 h-4 mr-1 text-red-500" fill="currentColor" />
+            {{ favoritePrompts.length }} 个收藏
+          </span>
+        </div>
+      </div>
 
-    <main class="main-content" :class="{ collapsed: isSidebarCollapsed }">
-      <div class="content-body">
-        <div class="content-container">
-          <!-- Page Header -->
-          <div class="page-header">
-            <div class="header-content">
-              <h1 class="page-title">我的收藏</h1>
-              <p class="page-desc">这里保存了你收藏的所有优质提示词模板。</p>
+      <!-- Filter & Search Bar -->
+      <div class="filter-section">
+        <div class="search-wrapper">
+          <Search class="search-icon" />
+          <input 
+            v-model="searchQuery" 
+            type="text" 
+            placeholder="搜索收藏的提示词..." 
+            class="search-input"
+          >
+        </div>
+        
+        <div class="filter-controls">
+          <div class="sort-wrapper">
+            <span class="sort-label">排序:</span>
+            <select v-model="activeSort" class="sort-select">
+              <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div v-if="filteredPrompts.length === 0" class="empty-state">
+        <div class="empty-icon">
+          <FolderHeart :size="48" stroke-width="1.5" />
+        </div>
+        <h3 class="empty-title">
+          {{ searchQuery ? '未找到相关提示词' : '还没有收藏任何提示词' }}
+        </h3>
+        <p class="empty-desc">
+          {{ searchQuery ? '尝试更换搜索关键词' : '去公共文件夹探索更多有趣的提示词吧' }}
+        </p>
+        <router-link v-if="!searchQuery" to="/public" class="primary-btn mt-4">
+          浏览公共文件夹
+        </router-link>
+      </div>
+
+      <!-- Prompts Grid -->
+      <div v-else class="prompts-grid">
+        <div v-for="prompt in filteredPrompts" :key="prompt.id" class="prompt-card group">
+          <div class="card-header">
+            <div class="prompt-icon" :class="getIconColor(prompt.color)">
+              <component :is="prompt.icon" :size="24" stroke-width="1.5" />
             </div>
-            <div class="header-stats">
-              <span class="stat-badge">
-                <Heart class="w-4 h-4 mr-1 text-red-500" fill="currentColor" />
-                {{ favoritePrompts.length }} 个收藏
+            <div class="card-actions">
+              <button class="action-btn delete-btn" title="取消收藏" @click.stop="removeFavorite(prompt.id)">
+                <Trash2 :size="18" />
+              </button>
+              <button class="action-btn" title="复制">
+                <Copy :size="18" />
+              </button>
+            </div>
+          </div>
+          
+          <div class="card-body">
+            <h3 class="card-title">{{ prompt.title }}</h3>
+            <p class="card-desc">{{ prompt.description }}</p>
+            
+            <div class="card-tags">
+              <span v-for="tag in prompt.tags" :key="tag" class="tag">
+                {{ tag }}
               </span>
             </div>
           </div>
-
-          <!-- Filter & Search Bar -->
-          <div class="filter-section">
-            <div class="search-wrapper">
-              <Search class="search-icon" />
-              <input 
-                v-model="searchQuery" 
-                type="text" 
-                placeholder="搜索收藏的提示词..." 
-                class="search-input"
-              >
+          
+          <div class="card-footer">
+            <div class="author-info">
+              <div class="avatar-sm">{{ prompt.author.charAt(0) }}</div>
+              <span class="author-name">{{ prompt.author }}</span>
             </div>
-            
-            <div class="filter-controls">
-              <div class="sort-wrapper">
-                <span class="sort-label">排序:</span>
-                <select v-model="activeSort" class="sort-select">
-                  <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
-                    {{ opt.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Empty State -->
-          <div v-if="filteredPrompts.length === 0" class="empty-state">
-            <div class="empty-icon">
-              <FolderHeart :size="48" stroke-width="1.5" />
-            </div>
-            <h3 class="empty-title">
-              {{ searchQuery ? '未找到相关提示词' : '还没有收藏任何提示词' }}
-            </h3>
-            <p class="empty-desc">
-              {{ searchQuery ? '尝试更换搜索关键词' : '去公共文件夹探索更多有趣的提示词吧' }}
-            </p>
-            <router-link v-if="!searchQuery" to="/public" class="primary-btn mt-4">
-              浏览公共文件夹
-            </router-link>
-          </div>
-
-          <!-- Prompts Grid -->
-          <div v-else class="prompts-grid">
-            <div v-for="prompt in filteredPrompts" :key="prompt.id" class="prompt-card group">
-              <div class="card-header">
-                <div class="prompt-icon" :class="getIconColor(prompt.color)">
-                  <component :is="prompt.icon" :size="24" stroke-width="1.5" />
-                </div>
-                <div class="card-actions">
-                  <button class="action-btn delete-btn" title="取消收藏" @click.stop="removeFavorite(prompt.id)">
-                    <Trash2 :size="18" />
-                  </button>
-                  <button class="action-btn" title="复制">
-                    <Copy :size="18" />
-                  </button>
-                </div>
-              </div>
-              
-              <div class="card-body">
-                <h3 class="card-title">{{ prompt.title }}</h3>
-                <p class="card-desc">{{ prompt.description }}</p>
-                
-                <div class="card-tags">
-                  <span v-for="tag in prompt.tags" :key="tag" class="tag">
-                    {{ tag }}
-                  </span>
-                </div>
-              </div>
-              
-              <div class="card-footer">
-                <div class="author-info">
-                  <div class="avatar-sm">{{ prompt.author.charAt(0) }}</div>
-                  <span class="author-name">{{ prompt.author }}</span>
-                </div>
-                <div class="stats">
-                  <span class="stat-item" title="收藏时间">
-                    <span class="date-text">收藏于 {{ prompt.favoritedAt }}</span>
-                  </span>
-                </div>
-              </div>
+            <div class="stats">
+              <span class="stat-item" title="收藏时间">
+                <span class="date-text">收藏于 {{ prompt.favoritedAt }}</span>
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.app-layout {
-  display: flex;
-  min-height: 100vh;
-  background-color: var(--bg-surface-soft);
-}
-
-.main-content {
-  flex: 1;
-  margin-left: var(--sidebar-width);
-  transition: margin-left var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-primary);
-}
-
-.main-content.collapsed {
-  margin-left: var(--sidebar-width-collapsed);
-}
-
 .content-body {
-  flex: 1;
+  height: 100%;
   padding: 2rem;
   overflow-y: auto;
+  background: var(--bg-primary);
 }
 
 .content-container {

@@ -10,6 +10,12 @@ export interface PromptStats {
   favorites?: number
 }
 
+export interface MainTag {
+  name: string
+  icon?: string
+  color?: string
+}
+
 export interface PromptItem {
   id: number
   uuid?: string
@@ -17,6 +23,7 @@ export interface PromptItem {
   description?: string // 改为可选
   content?: string
   tags: string[]
+  mainTag?: MainTag
   author: PromptAuthor
   stats: PromptStats
   updatedAt: string
@@ -29,10 +36,11 @@ export interface PromptListParams {
   page?: number
   pageSize?: number
   keyword?: string
-  filter?: 'all' | 'my' | 'favorites' | 'shared'
+  filter?: 'all' | 'my' | 'favorites' | 'shared' | 'plaza'
   sort?: 'updatedAt' | 'createdAt' | 'views' | 'likes'
   order?: 'asc' | 'desc'
   tagId?: number | null
+  deptId?: number | null
 }
 
 export interface TagItem {
@@ -44,6 +52,8 @@ export interface TagItem {
   children?: TagItem[]
   count?: number // Optional count if backend provides it, or calculated
   icon?: string // Optional icon path
+  color?: string
+  departmentId?: number // Added for department filtering
 }
 
 export interface PromptListResponse {

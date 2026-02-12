@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { optimizeStream } from '@/api/lyf-ai'
-import { Undo2, Redo2, Trash2, X } from 'lucide-vue-next'
+import { Undo2, Redo2, Trash2 } from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
-import ThinkBlock from './ThinkBlock.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps<{
@@ -13,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:content', val: string): void
   (e: 'open-config'): void
+  (e: 'ai-optimize'): void
 }>()
 
 const { toast } = useToast()
@@ -91,9 +90,6 @@ const clearContent = () => {
 }
 
 const isOptimizing = ref(false)
-const showOptimizeConfig = ref(false)
-const optimizeScene = ref('通用')
-const thinkContent = ref('')
 
 const handleOptimizeClick = () => {
   if (isOptimizing.value) return
@@ -102,77 +98,7 @@ const handleOptimizeClick = () => {
     toast('请先输入提示词内容', 'warning')
     return
   }
-  showOptimizeConfig.value = true
-}
-
-const confirmOptimize = async () => {
-  // Close modal immediately and wait for DOM update
-  showOptimizeConfig.value = false
-  await nextTick()
-
-  const scene = optimizeScene.value
-  
-  const originalContent = props.content
-  isOptimizing.value = true
-  
-  // Reset states
-  let fullResponse = ''
-  thinkContent.value = ''
-  
-  // Clear content to show streaming generation
-  emit('update:content', '正在优化中...')
-
-  try {
-    await optimizeStream(
-      {
-        raw_prompt: originalContent,
-        target_scene: scene
-      },
-      (chunk) => {
-        // If it's the first chunk, clear the "Optimizing..." placeholder
-        if (fullResponse === '') {
-          emit('update:content', '')
-        }
-        
-        fullResponse += chunk
-        
-        // Parse think content
-        const thinkStart = fullResponse.indexOf('<think>')
-        const thinkEnd = fullResponse.indexOf('</think>')
-        
-        if (thinkStart !== -1) {
-          const preThink = fullResponse.substring(0, thinkStart)
-          if (thinkEnd !== -1) {
-            // Think block is complete
-            thinkContent.value = fullResponse.substring(thinkStart + 7, thinkEnd)
-            const realContent = preThink + fullResponse.substring(thinkEnd + 8).trimStart()
-            emit('update:content', realContent)
-          } else {
-            // Think block is open
-            thinkContent.value = fullResponse.substring(thinkStart + 7)
-            emit('update:content', preThink) // Keep pre-think content
-          }
-        } else {
-          // No think block found (yet), treat as normal content
-          emit('update:content', fullResponse)
-        }
-      },
-      () => {
-        isOptimizing.value = false
-        toast('优化完成', 'success')
-      },
-      (err) => {
-        console.error(err)
-        toast('优化失败，已恢复原始内容', 'error')
-        emit('update:content', originalContent)
-        isOptimizing.value = false
-      }
-    )
-  } catch (e) {
-    console.error(e)
-    isOptimizing.value = false
-    emit('update:content', originalContent)
-  }
+  emit('ai-optimize')
 }
 
 const variables = computed(() => {
@@ -301,7 +227,6 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
     
     <div class="editor-content">
       <div class="editor-inner-container">
-        <ThinkBlock :content="thinkContent" :scrollable="true" />
         <textarea 
           ref="textareaRef"
           class="main-textarea" 
@@ -349,38 +274,6 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
       </div>
     </div>
   </div>
-
-  <!-- Optimize Config Modal -->
-  <Transition name="fade">
-    <div v-if="showOptimizeConfig" class="modal-overlay" @click.self="showOptimizeConfig = false">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>AI 优化设置</h3>
-          <button class="close-btn" @click="showOptimizeConfig = false">
-            <X :size="20" />
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>目标场景</label>
-            <input 
-              v-model="optimizeScene" 
-              type="text" 
-              placeholder="例如: 公文写作, 代码生成" 
-              @keyup.enter="confirmOptimize"
-              class="modal-input"
-              autofocus
-            />
-            <p class="hint">指定优化的目标场景，让 AI 更精准地理解您的需求</p>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button class="cancel-btn" @click="showOptimizeConfig = false">取消</button>
-          <button class="primary-btn" @click="confirmOptimize">开始优化</button>
-        </div>
-      </div>
-    </div>
-  </Transition>
 </template>
 
 <style scoped>
@@ -576,161 +469,5 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
 
 .test-btn:hover {
   background: #2563eb;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background: #ffffff;
-  border-radius: 16px;
-  width: 100%;
-  max-width: 480px;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border-subtle);
-  overflow: hidden;
-  animation: modal-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.modal-header {
-  padding: 20px;
-  border-bottom: 1px solid var(--bg-primary);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h3 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.close-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  transition: all 0.2s;
-}
-
-.close-btn:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.modal-body {
-  padding: 24px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.modal-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--text-primary);
-  transition: all 0.2s;
-  outline: none;
-}
-
-.modal-input:focus {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
-}
-
-.hint {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-.modal-actions {
-  padding: 20px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--bg-primary);
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.cancel-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--border-light);
-  background: #ffffff;
-  color: var(--text-secondary);
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.cancel-btn:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.primary-btn {
-  padding: 8px 20px;
-  border: none;
-  background: #8b5cf6;
-  color: #ffffff;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.primary-btn:hover {
-  background: #7c3aed;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
-}
-
-@keyframes modal-slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 </style>

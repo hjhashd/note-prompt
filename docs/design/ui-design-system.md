@@ -27,8 +27,8 @@
 *   `--text-inverse`: `#FFFFFF` (反色文字，用于深色按钮)
 
 ### 品牌色 (Accents)
-*   `--primary`: `#1A73E8` (Google Blue，用于链接/高亮)
-*   `--primary-light`: `#E8F0FE` (激活态背景)
+*   `--primary`: `#3B82F6` (Brand Blue，用于链接/高亮)
+*   `--primary-light`: `#EFF6FF` (激活态背景)
 
 ## 3. 核心组件规范 (Component Guidelines)
 
@@ -91,6 +91,17 @@
 *   **动效规范**:
     *   使用 `cubic-bezier(0.175, 0.885, 0.32, 1.275)` 贝塞尔曲线，赋予图标轻微的物理弹性感。
     *   侧边栏宽度切换时间统一为 `0.3s`。
+
+### 3.6 分类筛选 (Category Filtering)
+
+*   **组件**: `src/components/prompt/TiledCategoryFilter.vue`
+*   **设计模式**: 平铺式多级筛选 (Tiled Multi-level Filter)。
+*   **层级逻辑**:
+    *   **一级 (Level 1)**: 部门 (Department)，直接展示子部门，移除“全部公司”顶层节点。
+    *   **二级 (Level 2)**: 团队/组 (Team)，仅在选中一级部门后显示。
+*   **交互**:
+    *   **选中态**: 使用 Pill Shape + 品牌色边框/背景。
+    *   **全部选项**: 每个层级均包含“全部”按钮，用于重置该层级的筛选。
 
 ## 4. 间距与圆角 (Spacing & Radius)
 

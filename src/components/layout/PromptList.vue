@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Search, ArrowUpDown, Box, Heart, Eye, User } from 'lucide-vue-next'
+import { onBeforeUnmount, onMounted, ref, watch, inject, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { Search, ArrowUpDown, Box, Heart, Eye, User, ThumbsUp, Maximize2, CheckSquare, Square } from 'lucide-vue-next'
+import * as LucideIcons from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
 import PromptDetailModal from '@/components/common/PromptDetailModal.vue'
-import { getPrompts, toggleFavorite, getPromptDetail } from '@/api/prompt'
+import PromptSkeleton from '@/components/ui/Skeleton/PromptSkeleton.vue'
+import { getPrompts, toggleFavorite, toggleLike, getPromptDetail } from '@/api/prompt'
+import { deletePrompt } from '@/api/promptSave'
+import { useToast } from '@/composables/useToast'
 import type { PromptItem } from '@/types/prompt'
 
+const router = useRouter()
+const { toast } = useToast()
 const searchQuery = ref('')
 const activeFilter = ref('all')
 const sortBy = ref('updatedAt')
@@ -22,7 +29,56 @@ const selectedPromptData = ref<PromptItem | null>(null)
 const props = defineProps<{
   isSidebarCollapsed?: boolean
   tagId?: number | null
+  deptId?: number | null
+  filter?: string
+  sort?: string
+  search?: string
+  hideToolbar?: boolean
 }>()
+
+const emit = defineEmits<{
+  (e: 'promptsDeleted', promptIds: number[]): void
+}>()
+
+// 注入删除模式状态
+const isDeleteMode = inject<Ref<boolean>>('isDeleteMode', ref(false))
+const selectedPrompts = inject<Ref<Set<number>>>('selectedPrompts', ref(new Set()))
+const togglePromptSelection = inject<(promptId: number) => void>('togglePromptSelection', () => {})
+
+// 暴露方法给父组件
+const deleteSelectedPrompts = async (deleteWithSession = false): Promise<number[]> => {
+  const idsToDelete = Array.from(selectedPrompts.value)
+  if (idsToDelete.length === 0) return []
+  
+  const deletedIds: number[] = []
+  
+  for (const promptId of idsToDelete) {
+    try {
+      await deletePrompt(promptId, deleteWithSession)
+      deletedIds.push(promptId)
+    } catch (error: any) {
+      console.error(`Failed to delete prompt ${promptId}:`, error)
+    }
+  }
+  
+  // 从列表中移除已删除的
+  prompts.value = prompts.value.filter(p => !deletedIds.includes(p.id))
+  total.value -= deletedIds.length
+  
+  // 清空选择
+  selectedPrompts.value.clear()
+  
+  if (deletedIds.length > 0) {
+    toast(`成功删除 ${deletedIds.length} 个提示词`, 'success')
+    emit('promptsDeleted', deletedIds)
+  }
+  
+  return deletedIds
+}
+
+defineExpose({
+  deleteSelectedPrompts
+})
 
 const filters = [
   { id: 'all', label: '全部' },
@@ -61,11 +117,12 @@ const fetchPromptsList = async (append = false) => {
     const res = await getPrompts({
       page: currentPage.value,
       pageSize: pageSize.value,
-      keyword: searchQuery.value,
-      filter: activeFilter.value as any,
-      sort: sortBy.value as any,
+      keyword: props.search !== undefined ? props.search : searchQuery.value,
+      filter: (props.filter || activeFilter.value) as any,
+      sort: (props.sort || sortBy.value) as any,
       order: 'desc',
-      tagId: props.tagId
+      tagId: props.tagId,
+      deptId: props.deptId
     })
     
     if (append) {
@@ -83,18 +140,17 @@ const fetchPromptsList = async (append = false) => {
 
 // Watchers for refetching
 watch([activeFilter, sortBy], () => {
+  // If external control is enabled (props provided), ignore internal changes
+  if (props.filter || props.sort) return
+
   currentPage.value = 1
-  // 切换筛选/排序时，清空列表并重新加载，防止滚动位置导致立即触发加载更多
   prompts.value = [] 
   fetchPromptsList(false)
 })
 
-watch(() => props.tagId, (newId) => {
+watch(() => [props.tagId, props.deptId, props.filter, props.sort, props.search], () => {
   currentPage.value = 1
   prompts.value = []
-  // When selecting a tag, we might want to reset filter to 'all' or keep it?
-  // Usually 'all' makes sense unless user wants "My prompts in Python".
-  // Let's keep the filter but reset page.
   fetchPromptsList(false)
 })
 
@@ -158,7 +214,27 @@ const getPromptEmoji = (tags: string[]) => {
   return '✨'
 }
 
+const getIconComponent = (iconName: string) => {
+  if (!iconName) return LucideIcons.Sparkles
+  return (LucideIcons as any)[iconName] || LucideIcons.Sparkles
+}
+
 const handleCardClick = (prompt: PromptItem) => {
+  // 删除模式下点击卡片切换选择状态
+  if (isDeleteMode.value) {
+    togglePromptSelection(prompt.id)
+    return
+  }
+  
+  router.push({
+    path: '/studio',
+    query: {
+      promptId: prompt.id
+    }
+  })
+}
+
+const openDetailModal = (prompt: PromptItem) => {
   selectedPromptId.value = prompt.id
   selectedPromptData.value = prompt
   showDetailModal.value = true
@@ -177,6 +253,22 @@ const handleToggleFavorite = async (prompt: PromptItem) => {
     prompt.isFavorited = !newStatus
     prompt.stats.favorites = (prompt.stats.favorites || 0) + (!newStatus ? 1 : -1)
     console.error('Failed to toggle favorite:', error)
+  }
+}
+
+const handleToggleLike = async (prompt: PromptItem) => {
+  const newStatus = !prompt.isLiked
+  // Optimistic update
+  prompt.isLiked = newStatus
+  prompt.stats.likes = (prompt.stats.likes || 0) + (newStatus ? 1 : -1)
+  
+  try {
+    await toggleLike(prompt.id)
+  } catch (error) {
+    // Revert on error
+    prompt.isLiked = !newStatus
+    prompt.stats.likes = (prompt.stats.likes || 0) + (!newStatus ? 1 : -1)
+    console.error('Failed to toggle like:', error)
   }
 }
 
@@ -214,7 +306,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="prompt-list-container">
     <!-- Toolbar -->
-    <div class="toolbar">
+    <div class="toolbar" v-if="!hideToolbar">
       <div class="search-section">
         <div class="search-input-wrapper">
           <Search class="search-icon" :size="20" />
@@ -269,13 +361,24 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Grid -->
-    <div v-if="prompts.length" class="prompt-grid" :class="{ 'sidebar-collapsed': isSidebarCollapsed }">
+    <div v-if="loading && prompts.length === 0" class="prompt-grid">
+      <PromptSkeleton v-for="i in 8" :key="i" />
+    </div>
+    <div v-else-if="prompts.length" class="prompt-grid" :class="{ 'sidebar-collapsed': isSidebarCollapsed, 'delete-mode': isDeleteMode }">
       <div 
         v-for="prompt in prompts" 
         :key="prompt.id" 
         class="prompt-card" 
-        @click="handleCardClick(prompt)"
+        :class="{ 
+          'selected': selectedPrompts.has(prompt.id),
+          'delete-mode': isDeleteMode 
+        }"
       >
+        <!-- 删除模式选择框 -->
+        <div v-if="isDeleteMode" class="selection-indicator">
+          <CheckSquare v-if="selectedPrompts.has(prompt.id)" :size="24" class="checked" />
+          <Square v-else :size="24" class="unchecked" />
+        </div>
         <div class="card-header">
           <div class="header-top">
             <div class="prompt-tags">
@@ -289,19 +392,33 @@ onBeforeUnmount(() => {
               </span>
             </div>
             <div class="actions">
+              <button class="like-btn" title="查看详情" @click.stop="openDetailModal(prompt)">
+                <Eye :size="18" />
+              </button>
               <CopyButton :text="prompt.content || ''" />
-              <button class="like-btn" :class="{ 'liked': prompt.isFavorited }" @click.stop="handleToggleFavorite(prompt)">
+              <button v-if="filter !== 'my'" class="like-btn" :class="{ 'liked': prompt.isLiked }" @click.stop="handleToggleLike(prompt)">
+                <ThumbsUp :size="18" :fill="prompt.isLiked ? 'currentColor' : 'none'" />
+              </button>
+              <button class="like-btn" :class="{ 'favorited': prompt.isFavorited }" @click.stop="handleToggleFavorite(prompt)">
                 <Heart :size="18" :fill="prompt.isFavorited ? 'currentColor' : 'none'" />
               </button>
             </div>
           </div>
           <h3 class="prompt-title">
-            <span class="title-icon" aria-hidden="true">{{ getPromptEmoji(prompt.tags) }}</span>
+            <span class="title-icon" aria-hidden="true" :style="{ color: prompt.mainTag?.color || 'inherit' }">
+              <component 
+                v-if="prompt.mainTag?.icon" 
+                :is="getIconComponent(prompt.mainTag.icon)" 
+                :size="20"
+                class="lucide-icon"
+              />
+              <span v-else>{{ getPromptEmoji(prompt.tags) }}</span>
+            </span>
             <span class="title-text">{{ prompt.title }}</span>
           </h3>
         </div>
         
-        <div class="card-body">
+        <div class="card-body" @click="handleCardClick(prompt)">
           <p class="prompt-desc">{{ prompt.description || (prompt.content ? prompt.content.slice(0, 100) + (prompt.content.length > 100 ? '...' : '') : '暂无描述') }}</p>
           <div class="card-tags">
             <span 
@@ -318,8 +435,10 @@ onBeforeUnmount(() => {
         <div class="card-footer">
           <div class="author-info">
             <span class="author-avatar">
-              <img v-if="prompt.author.avatar" :src="prompt.author.avatar" alt="" class="avatar-img">
-              <User v-else :size="12" />
+              <!-- <img v-if="prompt.author.avatar" :src="prompt.author.avatar" alt="" class="avatar-img"> -->
+              <template v-if="true">
+                {{ prompt.author.name?.charAt(0).toUpperCase() || 'U' }}
+              </template>
             </span>
             <span class="author-name">{{ prompt.author.name }}</span>
             <span class="divider">•</span>
@@ -330,6 +449,10 @@ onBeforeUnmount(() => {
             <div class="metric" title="浏览量">
               <Eye :size="14" />
               <span>{{ prompt.stats.views }}</span>
+            </div>
+            <div class="metric" title="点赞数">
+              <ThumbsUp :size="14" />
+              <span>{{ prompt.stats.likes || 0 }}</span>
             </div>
             <div class="metric" title="收藏数">
               <Heart :size="14" />
@@ -582,6 +705,43 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-card);
 }
 
+/* Delete Mode Styles */
+.prompt-grid.delete-mode .prompt-card {
+  position: relative;
+  cursor: pointer;
+}
+
+.prompt-card.delete-mode {
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.prompt-card.delete-mode:hover {
+  border-color: var(--primary);
+}
+
+.prompt-card.delete-mode.selected {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.05);
+}
+
+.selection-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.selection-indicator .checked {
+  color: var(--primary);
+}
+
+.selection-indicator .unchecked {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
 .card-header {
   margin-bottom: 12px;
 }
@@ -618,12 +778,17 @@ onBeforeUnmount(() => {
 }
 
 .like-btn.liked {
+  color: #f59e0b;
+}
+
+.like-btn.favorited {
   color: #ef4444;
 }
 
 .card-body {
   flex: 1;
   margin-bottom: 16px;
+  cursor: pointer;
 }
 
 .prompt-title {
@@ -723,11 +888,13 @@ onBeforeUnmount(() => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--bg-secondary);
+  background: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
   overflow: hidden;
 }
 

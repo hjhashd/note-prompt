@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import Sidebar from '@/components/layout/Sidebar.vue'
 import { 
   Users, 
   FileText, 
@@ -10,12 +9,6 @@ import {
   Eye,
   Edit
 } from 'lucide-vue-next'
-
-const isCollapsed = ref(false)
-
-const toggleSidebar = () => {
-  isCollapsed.value = !isCollapsed.value
-}
 
 // Stats Data
 const stats = [
@@ -98,10 +91,8 @@ const getRankClass = (rank: number) => {
 </script>
 
 <template>
-  <div class="app-container">
-    <Sidebar :collapsed="isCollapsed" @toggle="toggleSidebar" />
-    
-    <main class="main-content" :class="{ collapsed: isCollapsed }">
+  <div class="admin-panel">
+    <div class="content-body">
       <!-- Page Header -->
       <header class="page-header">
         <h1 class="page-title">管理员面板</h1>
@@ -275,29 +266,22 @@ const getRankClass = (rank: number) => {
         </div>
       </section>
 
-    </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.app-container {
-  display: flex;
-  min-height: 100vh;
+.admin-panel {
+  height: 100%;
+  overflow-y: auto;
   background-color: var(--bg-primary);
 }
 
-.main-content {
-  flex: 1;
-  margin-left: var(--sidebar-width);
+.content-body {
   padding: 32px;
-  transition: margin-left var(--transition-normal);
-  width: calc(100% - var(--sidebar-width));
   background-color: var(--bg-primary);
-}
-
-.main-content.collapsed {
-  margin-left: var(--sidebar-width-collapsed);
-  width: calc(100% - var(--sidebar-width-collapsed));
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* Page Header */
@@ -653,7 +637,7 @@ tr:last-child td {
 
 .badge.premium {
   background: #eef2ff;
-  color: #4f46e5;
+  color: var(--primary);
 }
 
 .badge.standard {

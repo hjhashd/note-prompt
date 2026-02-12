@@ -11,15 +11,16 @@
       <div class="text-center">
         <div class="logo-wrapper mb-6">
           <div class="logo-icon">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--primary)" />
-              <path d="M2 17L12 22L22 17" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-              <path d="M2 12L12 17L22 12" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto">
+              <circle cx="40" cy="40" r="37" fill="#3B82F6"/>
+              <path d="M25 25L41 40L25 55" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M47 48H58" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="51" cy="32" r="2.5" fill="#FFFFFF"/>
             </svg>
           </div>
         </div>
         <h2 class="text-4xl font-black tracking-tight text-gray-900 mb-2">
-          NotePrompt
+          提示词平台
         </h2>
         <p class="text-gray-500 font-medium">欢迎回来，请登录您的账户</p>
       </div>

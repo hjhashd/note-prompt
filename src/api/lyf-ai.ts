@@ -7,6 +7,7 @@ import { useUserStore } from '@/stores/user'
 export interface ChatRequest {
   query: string
   user_id?: string
+  session_id?: number
 }
 
 export interface OptimizeRequest {
@@ -26,6 +27,7 @@ async function handleStreamRequest(
   url: string,
   params: any,
   onMessage: (content: string) => void,
+  onMeta?: (meta: any) => void,
   onDone?: () => void,
   onError?: (error: any) => void
 ) {
@@ -74,6 +76,9 @@ async function handleStreamRequest(
           
           try {
             const parsed = JSON.parse(data)
+            if (parsed.meta && onMeta) {
+              onMeta(parsed.meta)
+            }
             if (parsed.content) {
               onMessage(parsed.content)
             }
@@ -95,13 +100,15 @@ async function handleStreamRequest(
 export async function chatStream(
   params: ChatRequest,
   onMessage: (content: string) => void,
+  onMeta?: (meta: any) => void,
   onDone?: () => void,
   onError?: (error: any) => void
 ) {
   return handleStreamRequest(
-    '/api/python/ai/chat/prompt_chat/stream',
+    '/api/python/ai/chat/v2/prompt_chat/stream',
     params,
     onMessage,
+    onMeta,
     onDone,
     onError
   )
@@ -120,6 +127,7 @@ export async function optimizeStream(
     '/api/python/ai/optimize/prompt_optimize/stream',
     params,
     onMessage,
+    undefined,
     onDone,
     onError
   )
@@ -138,7 +146,93 @@ export async function testStream(
     '/api/python/ai/test/prompt_test/stream',
     params,
     onMessage,
+    undefined,
     onDone,
     onError
   )
+}
+
+async function handleJsonRequest<TResponse = any>(
+  url: string,
+  options: RequestInit
+): Promise<TResponse> {
+  const userStore = useUserStore()
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${userStore.token}`,
+      ...(options.headers || {})
+    }
+  })
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    throw new Error(`HTTP error! status: ${resp.status} ${text}`)
+  }
+
+  return resp.json()
+}
+
+export interface ChatSessionItem {
+  session_id: number
+  title: string
+  create_time?: string
+  update_time?: string
+  status?: string
+}
+
+export interface ChatMessageItem {
+  id: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  create_time?: string
+}
+
+export async function createChatSession(title?: string) {
+  return handleJsonRequest<ChatSessionItem>('/api/python/ai/chat/v2/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ title })
+  })
+}
+
+export async function listChatSessions(limit = 50, status?: string) {
+  const url = new URL('/api/python/ai/chat/v2/sessions', window.location.origin)
+  url.searchParams.set('limit', String(limit))
+  if (status) url.searchParams.set('status', status)
+  return handleJsonRequest<ChatSessionItem[]>(url.pathname + url.search, { method: 'GET' })
+}
+
+export async function getChatSessionMessages(sessionId: number, limit = 200) {
+  const url = new URL(`/api/python/ai/chat/v2/sessions/${sessionId}/messages`, window.location.origin)
+  url.searchParams.set('limit', String(limit))
+  return handleJsonRequest<ChatMessageItem[]>(url.pathname + url.search, { method: 'GET' })
+}
+
+export async function renameChatSession(sessionId: number, title: string) {
+  return handleJsonRequest<ChatSessionItem>(`/api/python/ai/chat/v2/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title })
+  })
+}
+
+export async function deleteChatSession(sessionId: number, deletePrompt = true) {
+  return handleJsonRequest<{ 
+    ok: boolean, 
+    session_id: number, 
+    deleted_prompt?: boolean,session_id?: number 
+  }>(`/api/python/ai/chat/v2/sessions/${sessionId}?delete_prompt=${deletePrompt}`, {
+    method: 'DELETE'
+  })
+}
+
+export async function autoGenerateTitle(sessionId: number, contextText: string) {
+  return handleJsonRequest<{ 
+    ok: boolean, 
+    session_id: number, 
+    new_title: string 
+  }>(`/api/python/ai/title/sessions/${sessionId}/auto-title`, {
+    method: 'POST',
+    body: JSON.stringify({ context_text: contextText })
+  })
 }

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import Sidebar from '@/components/layout/Sidebar.vue'
 import { 
   FileText, 
   Heart, 
@@ -13,12 +12,6 @@ import {
   Download
 } from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
-
-const isCollapsed = ref(false)
-
-const toggleSidebar = () => {
-  isCollapsed.value = !isCollapsed.value
-}
 
 // Mock Data for Stats
 const stats = [
@@ -132,128 +125,110 @@ const editPrompt = (id: number) => {
 </script>
 
 <template>
-  <div class="app-container">
-    <Sidebar :collapsed="isCollapsed" @toggle="toggleSidebar" />
-    
-    <main class="main-content" :class="{ collapsed: isCollapsed }">
-      <!-- Header -->
-      <header class="page-header">
-        <div class="header-content">
-          <h1 class="page-title">我的个人中心</h1>
-          <p class="page-desc">查看您的使用统计和活动记录</p>
-        </div>
-      </header>
+  <div class="profile-view">
+    <!-- Header -->
+    <header class="page-header">
+      <div class="header-content">
+        <h1 class="page-title">我的个人中心</h1>
+        <p class="page-desc">查看您的使用统计和活动记录</p>
+      </div>
+    </header>
 
-      <!-- Stats Overview -->
-      <section class="stats-overview">
-        <div v-for="stat in stats" :key="stat.id" class="stat-card">
-          <div class="stat-card-header">
-            <div class="stat-icon" :class="stat.colorClass">
-              <component :is="stat.icon" :size="20" />
-            </div>
-          </div>
-          <div class="stat-value">{{ stat.value }}</div>
-          <div class="stat-label">{{ stat.label }}</div>
-          <div class="stat-trend" :class="{ positive: stat.trendUp, negative: !stat.trendUp }">
-            <TrendingUp :size="12" />
-            {{ stat.trend }} 本月
+    <!-- Stats Overview -->
+    <section class="stats-overview">
+      <div v-for="stat in stats" :key="stat.id" class="stat-card">
+        <div class="stat-card-header">
+          <div class="stat-icon" :class="stat.colorClass">
+            <component :is="stat.icon" :size="20" />
           </div>
         </div>
-      </section>
-
-      <!-- Activity Section -->
-      <section class="activity-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <Activity :size="18" class="mr-2 inline-block" />
-            最近活动
-          </h2>
-          <a href="#" class="section-action">查看全部</a>
+        <div class="stat-value">{{ stat.value }}</div>
+        <div class="stat-label">{{ stat.label }}</div>
+        <div class="stat-trend" :class="{ positive: stat.trendUp, negative: !stat.trendUp }">
+          <TrendingUp :size="12" />
+          {{ stat.trend }} 本月
         </div>
-        <div class="activity-list">
-          <div v-for="activity in activities" :key="activity.id" class="activity-item">
-            <div class="activity-icon" :class="activity.type">
-              <component :is="activity.icon" :size="16" />
+      </div>
+    </section>
+
+    <!-- Activity Section -->
+    <section class="activity-section">
+      <div class="section-header">
+        <h2 class="section-title">
+          <Activity :size="18" class="mr-2 inline-block" />
+          最近活动
+        </h2>
+        <a href="#" class="section-action">查看全部</a>
+      </div>
+      <div class="activity-list">
+        <div v-for="activity in activities" :key="activity.id" class="activity-item">
+          <div class="activity-icon" :class="activity.type">
+            <component :is="activity.icon" :size="16" />
+          </div>
+          <div class="activity-content">
+            <div class="activity-text">
+              {{ activity.text }} <strong>{{ activity.highlight }}</strong>
             </div>
-            <div class="activity-content">
-              <div class="activity-text">
-                {{ activity.text }} <strong>{{ activity.highlight }}</strong>
-              </div>
-              <div class="activity-time">{{ activity.time }}</div>
-            </div>
+            <div class="activity-time">{{ activity.time }}</div>
           </div>
         </div>
-      </section>
+      </div>
+    </section>
 
-      <!-- Prompt Details Table -->
-      <section class="prompt-details">
-        <div class="section-header">
-          <h2 class="section-title">
-            <FileText :size="18" class="mr-2 inline-block" />
-            提示词明细表
-          </h2>
-          <button class="section-action-btn">
-            <Download :size="14" />
-            导出数据
-          </button>
-        </div>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th class="text-left">提示词名称</th>
-                <th class="text-center">点赞数</th>
-                <th class="text-center">收藏数</th>
-                <th class="text-center">应用数</th>
-                <th class="text-center">创建时间</th>
-                <th class="text-center">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in promptDetails" :key="item.id">
-                <td class="font-medium text-gray-800">{{ item.name }}</td>
-                <td class="text-center">{{ item.likes }}</td>
-                <td class="text-center">{{ item.favorites }}</td>
-                <td class="text-center">{{ item.uses }}</td>
-                <td class="text-center text-gray-500 text-sm">{{ item.createdAt }}</td>
-                <td class="text-center">
-                  <div class="action-buttons">
-                    <button class="action-btn primary" @click="editPrompt(item.id)" title="编辑">
-                      <Edit :size="14" />
-                      编辑
-                    </button>
-                    <CopyButton :text="item.name" label="复制" />
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-    </main>
+    <!-- Prompt Details Table -->
+    <section class="prompt-details">
+      <div class="section-header">
+        <h2 class="section-title">
+          <FileText :size="18" class="mr-2 inline-block" />
+          提示词明细表
+        </h2>
+        <button class="section-action-btn">
+          <Download :size="14" />
+          导出数据
+        </button>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th class="text-left">提示词名称</th>
+              <th class="text-center">点赞数</th>
+              <th class="text-center">收藏数</th>
+              <th class="text-center">应用数</th>
+              <th class="text-center">创建时间</th>
+              <th class="text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in promptDetails" :key="item.id">
+              <td class="font-medium text-gray-800">{{ item.name }}</td>
+              <td class="text-center">{{ item.likes }}</td>
+              <td class="text-center">{{ item.favorites }}</td>
+              <td class="text-center">{{ item.uses }}</td>
+              <td class="text-center text-gray-500 text-sm">{{ item.createdAt }}</td>
+              <td class="text-center">
+                <div class="action-buttons">
+                  <button class="action-btn primary" @click="editPrompt(item.id)" title="编辑">
+                    <Edit :size="14" />
+                    编辑
+                  </button>
+                  <CopyButton :text="item.name" label="复制" />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </template>
 
 <style scoped>
-.app-container {
-  display: flex;
-  min-height: 100vh;
-  background-color: var(--bg-primary);
-}
-
-.main-content {
-  flex: 1;
-  margin-left: var(--sidebar-width);
+.profile-view {
+  height: 100%;
+  overflow-y: auto;
   padding: 32px;
-  transition: margin-left var(--transition-normal);
-  width: calc(100% - var(--sidebar-width));
   background-color: var(--bg-primary);
-}
-
-.main-content.collapsed {
-  margin-left: var(--sidebar-width-collapsed);
-  width: calc(100% - var(--sidebar-width-collapsed));
 }
 
 /* Page Header */

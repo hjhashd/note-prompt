@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { Copy, Check } from 'lucide-vue-next'
 import { useToast } from '@/composables/useToast'
+import { copyToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   text: string
@@ -12,15 +13,14 @@ const copied = ref(false)
 const { toast } = useToast()
 
 const handleCopy = async () => {
-  try {
-    await navigator.clipboard.writeText(props.text)
+  const success = await copyToClipboard(props.text)
+  if (success) {
     copied.value = true
     toast('复制成功', 'success')
     setTimeout(() => {
       copied.value = false
     }, 2000)
-  } catch (err) {
-    console.error('Failed to copy:', err)
+  } else {
     toast('复制失败', 'error')
   }
 }

@@ -1,23 +1,102 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import Sidebar from '@/components/layout/Sidebar.vue'
+import { ref, nextTick, watch } from 'vue'
+import { useAppStore } from '@/stores/app'
+import { useChatStore } from '@/stores/chat'
+import { storeToRefs } from 'pinia'
 import StudioHeader from '@/components/editor/StudioHeader.vue'
 import StudioSidebar from '@/components/editor/StudioSidebar.vue'
 import StudioDialogue from '@/components/editor/StudioDialogue.vue'
 import StudioEditor from '@/components/editor/StudioEditor.vue'
 import StudioConfig from '@/components/editor/StudioConfig.vue'
+import SavePromptModal from '@/components/editor/SavePromptModal.vue'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
+import type { PromptItem } from '@/types/prompt'
+import { useToast } from '@/composables/useToast'
 
-const isSidebarCollapsed = ref(false)
+const appStore = useAppStore()
+const chatStore = useChatStore()
+const { currentSessionTitle } = storeToRefs(chatStore)
+const { toast } = useToast()
+
 const isLeftPanelCollapsed = ref(false)
-const currentMode = ref('dialogue')
-const promptTitle = ref('未命名提示词')
-const promptContent = ref('你是一位专业的SEO内容作家。\n\n请围绕主题 {{topic}} 撰写一篇博客文章，目标关键词为 {{keyword}}。\n\n约束条件：\n1. 文章结构清晰，包含引言、正文、结论\n2. 内容专业且易于阅读\n3. 适当使用标题和段落\n4. 语调：{{tone}}\n\n输出格式：JSON')
 const showConfig = ref(false)
-
-// Resizable Config Panel
 const configPanelWidth = ref(450)
 const isResizing = ref(false)
+
+const showSaveModal = ref(false)
+const saveModalMessageId = ref<number | string | null>(null)
+
+const dialogueRef = ref<InstanceType<typeof StudioDialogue> | null>(null)
+const currentMode = ref('dialogue')
+const promptContent = ref('你是一位专业的SEO内容作家。\n\n请围绕主题 {{topic}} 撰写一篇博客文章，目标关键词为 {{keyword}}。\n\n约束条件：\n1. 文章结构清晰，包含引言、正文、结论\n2. 内容专业且易于阅读\n3. 适当使用标题和段落\n4. 语调：{{tone}}\n\n输出格式：JSON')
+const promptTitle = ref('新对话')
+
+// Sync title with store (handles both session title and draft prompt title)
+watch(currentSessionTitle, (newTitle) => {
+  promptTitle.value = newTitle
+}, { immediate: true })
+
+const handleAiOptimize = async () => {
+  currentMode.value = 'dialogue'
+  await nextTick()
+  if (dialogueRef.value) {
+    dialogueRef.value.handleOptimizePrompt(promptContent.value)
+  }
+}
+
+const handleOpenTest = (content: string) => {
+  promptContent.value = content
+  openConfig()
+}
+
+const handleSwitchExpert = (content: string) => {
+  promptContent.value = content
+  currentMode.value = 'editor'
+}
+
+const handleSwitchSession = (sessionId: number) => {
+  currentMode.value = 'dialogue'
+}
+
+const handleNewChat = () => {
+  currentMode.value = 'dialogue'
+}
+
+const handleOpenSaveModal = (messageId?: number | string) => {
+  saveModalMessageId.value = messageId ?? null
+  showSaveModal.value = true
+}
+
+const handlePromptSaved = (result: any) => {
+  toast('提示词保存成功', 'success')
+
+  if (result?.session_status === 1) {
+    chatStore.loadSessions()
+  }
+}
+
+const handleSelectPrompt = (prompt: PromptItem) => {
+  promptContent.value = prompt.content || ''
+  promptTitle.value = prompt.title
+  currentMode.value = 'editor'
+}
+
+const openConfig = () => {
+  showConfig.value = true
+  configPanelWidth.value = 800
+  // Auto collapse sidebars for canvas-like experience to maximize content area
+  appStore.setSidebarCollapsed(true)
+  isLeftPanelCollapsed.value = true
+}
+
+const closeConfig = () => {
+  showConfig.value = false
+  // Auto expand left panel when config is closed to avoid empty space
+  // Add a small delay to make the transition smoother (wait for right panel to start exiting)
+  setTimeout(() => {
+    isLeftPanelCollapsed.value = false
+  }, 300)
+}
 
 const startResize = () => {
   isResizing.value = true
@@ -29,32 +108,14 @@ const startResize = () => {
 
 const handleResize = (e: MouseEvent) => {
   if (!isResizing.value) return
-  
-  // Calculate new width: Window width - Mouse X
   const newWidth = window.innerWidth - e.clientX
-  
-  // Expert Area Min Width should be around 500px for a "comfortable" experience
-  const expertAreaMinWidth = 500
-  
-  // Calculate total occupied width by other panels
-  const sidebarWidth = isSidebarCollapsed.value ? 72 : 280
-  const leftPanelWidth = isLeftPanelCollapsed.value ? 20 : 260
-  
-  const maxAllowedWidth = window.innerWidth - sidebarWidth - leftPanelWidth - expertAreaMinWidth
-  
-  // Limits: Min 300px, Max dynamically calculated but at least 800px if space allows
   const minWidth = 300
-  const maxWidth = Math.max(800, maxAllowedWidth)
+  // Dynamic max width: allow stretching up to window width minus min editor width (300px)
+  // This allows the sidebar to take up most of the screen like a canvas overlay
+  const maxWidth = window.innerWidth - 300
   
-  if (newWidth >= minWidth && newWidth <= maxAllowedWidth) {
+  if (newWidth >= minWidth && newWidth <= maxWidth) {
     configPanelWidth.value = newWidth
-  } else if (newWidth < minWidth) {
-    configPanelWidth.value = minWidth
-  } else if (newWidth > maxAllowedWidth) {
-    // If user really wants it bigger and expert area is still > 300px (bare minimum)
-    if (window.innerWidth - sidebarWidth - leftPanelWidth - newWidth > 300) {
-        configPanelWidth.value = newWidth
-    }
   }
 }
 
@@ -65,106 +126,92 @@ const stopResize = () => {
   document.body.style.cursor = ''
   document.body.style.userSelect = ''
 }
-
-const toggleSidebar = () => {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-}
-
-const toggleConfig = () => {
-  showConfig.value = !showConfig.value
-}
-
-// Auto-collapse left panel when right panel opens
-watch(showConfig, (val) => {
-  if (val) {
-    isLeftPanelCollapsed.value = true
-  }
-})
 </script>
 
 <template>
-  <div class="app-layout">
-    <Sidebar :collapsed="isSidebarCollapsed" @toggle="toggleSidebar" />
+  <div class="studio-layout">
+    <StudioHeader 
+      v-model:mode="currentMode"
+      v-model:title="promptTitle"
+    />
     
-    <main class="main-content" :class="{ collapsed: isSidebarCollapsed }">
-      <div class="studio-layout">
-        <StudioHeader 
-          v-model:mode="currentMode"
-          v-model:title="promptTitle"
-          @toggle-chat="toggleConfig"
-        />
-        
-        <div class="studio-body">
-          <!-- Left Sidebar: Prompt Library -->
-          <div class="left-panel-wrapper" :class="{ collapsed: isLeftPanelCollapsed }">
-            <aside class="panel-card sidebar-panel" v-show="!isLeftPanelCollapsed">
-              <StudioSidebar />
-            </aside>
-            <button 
-              class="panel-toggle-btn"
-              @click="isLeftPanelCollapsed = !isLeftPanelCollapsed"
-              :title="isLeftPanelCollapsed ? '展开侧边栏' : '收起侧边栏'"
-            >
-              <component :is="isLeftPanelCollapsed ? PanelLeftOpen : PanelLeftClose" :size="16" />
-            </button>
-          </div>
-          
-          <!-- Center: Main Workspace -->
-          <main class="panel-card studio-main">
-            <KeepAlive>
-              <StudioDialogue v-if="currentMode === 'dialogue'" key="dialogue" />
-              <StudioEditor 
-                v-else 
-                key="editor" 
-                v-model:content="promptContent" 
-                @open-config="showConfig = true"
-              />
-            </KeepAlive>
-          </main>
-          
-          <!-- Right: Configuration Panel -->
-          <transition name="slide-right">
-            <aside class="panel-card config-panel" v-show="showConfig" :style="{ width: configPanelWidth + 'px' }">
-              <div class="resize-handle" @mousedown.prevent="startResize"></div>
-              <StudioConfig :content="promptContent" @close="showConfig = false" />
-            </aside>
-          </transition>
-        </div>
+    <div class="studio-body">
+      <!-- Left Sidebar: Prompt Library -->
+      <div class="left-panel-wrapper" :class="{ collapsed: isLeftPanelCollapsed }">
+        <aside class="panel-card sidebar-panel" v-show="!isLeftPanelCollapsed">
+          <StudioSidebar 
+            @switch-session="handleSwitchSession" 
+            @new-chat="handleNewChat"
+            @select-prompt="handleSelectPrompt"
+          />
+        </aside>
+        <button 
+          class="panel-toggle-btn"
+          @click="isLeftPanelCollapsed = !isLeftPanelCollapsed"
+          :title="isLeftPanelCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        >
+          <component :is="isLeftPanelCollapsed ? PanelLeftOpen : PanelLeftClose" :size="16" />
+        </button>
       </div>
-    </main>
+      
+      <!-- Center: Main Workspace -->
+      <main class="panel-card studio-main">
+        <KeepAlive>
+          <StudioDialogue 
+            v-if="currentMode === 'dialogue'" 
+            ref="dialogueRef"
+            key="dialogue" 
+            @update:title="(t) => promptTitle = t"
+            @open-test="handleOpenTest"
+            @switch-expert="handleSwitchExpert"
+            @open-save="handleOpenSaveModal"
+          />
+          <StudioEditor 
+            v-else 
+            key="editor" 
+            v-model:content="promptContent" 
+            @open-config="openConfig"
+            @ai-optimize="handleAiOptimize"
+          />
+        </KeepAlive>
+      </main>
+      
+      <!-- Right Sidebar: Config & Test -->
+      <Transition name="slide-right">
+        <aside 
+          class="panel-card config-panel" 
+          v-if="showConfig"
+          :style="{ width: configPanelWidth + 'px' }"
+        >
+          <div class="resize-handle" @mousedown="startResize"></div>
+          <StudioConfig 
+            :content="promptContent" 
+            @close="closeConfig"
+          />
+        </aside>
+      </Transition>
+    </div>
+
+    <SavePromptModal
+      v-model:visible="showSaveModal"
+      :initial-title="chatStore.currentSessionTitle"
+      :initial-message-id="saveModalMessageId"
+      :messages="chatStore.messages"
+      :prompt-content="promptContent"
+      :session-id="chatStore.currentSessionId"
+      @saved="handlePromptSaved"
+    />
   </div>
 </template>
 
 <style scoped>
-.app-layout {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-}
-
-.main-content {
-  flex: 1;
-  margin-left: var(--sidebar-width);
-  min-width: 0;
-  background: var(--bg-primary);
-  height: 100vh;
-  overflow: hidden;
-  transition: margin-left var(--transition-normal);
-  display: flex;
-  flex-direction: column;
-}
-
-.main-content.collapsed {
-  margin-left: var(--sidebar-width-collapsed);
-}
-
 .studio-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   flex: 1;
+  background: var(--bg-primary);
 }
 
 .studio-body {
@@ -177,13 +224,13 @@ watch(showConfig, (val) => {
 
 /* Panel Cards - Enhanced Visual Hierarchy & IDE Style */
 .panel-card {
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-subtle);
 }
 
 .left-panel-wrapper {
@@ -233,9 +280,7 @@ watch(showConfig, (val) => {
 .studio-main {
   flex: 1;
   position: relative;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  min-width: 0;
 }
 
 .config-panel {
@@ -264,13 +309,17 @@ watch(showConfig, (val) => {
 /* Transitions */
 .slide-right-enter-active,
 .slide-right-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+  overflow: hidden;
 }
 
 .slide-right-enter-from,
 .slide-right-leave-to {
   transform: translateX(100%);
   opacity: 0;
+  width: 0 !important;
+  margin: 0;
+  border-width: 0;
 }
 
 @media (max-width: 1024px) {

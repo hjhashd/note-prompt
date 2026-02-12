@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { X, User, Calendar, Eye, Heart } from 'lucide-vue-next'
+import { X, User, Calendar, Eye, Heart, ThumbsUp } from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
-import { getPromptDetail, toggleFavorite } from '@/api/prompt'
+import { getPromptDetail, toggleFavorite, toggleLike } from '@/api/prompt'
 import type { PromptItem } from '@/types/prompt'
 
 const props = defineProps<{
@@ -19,6 +19,7 @@ const emit = defineEmits<{
 const prompt = ref<PromptItem | null>(null)
 const loading = ref(false)
 const togglingFavorite = ref(false)
+const togglingLike = ref(false)
 
 const close = () => {
   emit('update:visible', false)
@@ -40,6 +41,25 @@ const handleToggleFavorite = async () => {
     console.error('Failed to toggle favorite:', error)
   } finally {
     togglingFavorite.value = false
+  }
+}
+
+const handleToggleLike = async () => {
+  if (!prompt.value || !props.promptId || togglingLike.value) return
+  
+  togglingLike.value = true
+  try {
+    const newStatus = await toggleLike(props.promptId)
+    prompt.value.isLiked = newStatus
+    const currentLikes = prompt.value.stats.likes || 0
+    prompt.value.stats.likes = currentLikes + (newStatus ? 1 : -1)
+    
+    // Emit update to parent
+    emit('update', prompt.value)
+  } catch (error) {
+    console.error('Failed to toggle like:', error)
+  } finally {
+    togglingLike.value = false
   }
 }
 
@@ -117,8 +137,10 @@ const getTagTone = (tag: string) => {
             <div class="prompt-meta">
               <div class="author">
                 <div class="avatar">
-                  <img v-if="prompt.author.avatar" :src="prompt.author.avatar" alt="">
-                  <User v-else :size="14" />
+                  <!-- <img v-if="prompt.author.avatar" :src="prompt.author.avatar" alt=""> -->
+                  <template v-if="true">
+                    {{ prompt.author.name?.charAt(0).toUpperCase() || 'U' }}
+                  </template>
                 </div>
                 <span class="author-name">{{ prompt.author.name }}</span>
               </div>
@@ -139,6 +161,18 @@ const getTagTone = (tag: string) => {
             <div class="stat">
               <Eye :size="16" />
               <span>{{ prompt.stats.views }} 浏览</span>
+            </div>
+            <div 
+              class="stat interactive" 
+              :class="{ 'is-active': prompt.isLiked }"
+              @click="handleToggleLike"
+            >
+              <ThumbsUp 
+                :size="16" 
+                :fill="prompt.isLiked ? 'currentColor' : 'none'" 
+                :class="{ 'animate-bounce': togglingLike }"
+              />
+              <span>{{ prompt.stats.likes || 0 }} 点赞</span>
             </div>
             <div 
               class="stat interactive" 
@@ -252,10 +286,13 @@ const getTagTone = (tag: string) => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--bg-secondary);
+  background: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
   overflow: hidden;
   border: 1px solid rgba(0, 0, 0, 0.05);
 }

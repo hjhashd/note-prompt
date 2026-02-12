@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { ArrowLeft } from 'lucide-vue-next'
 
 const props = defineProps<{
   title: string
@@ -9,9 +11,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:title', value: string): void
   (e: 'update:mode', value: string): void
-  (e: 'toggle-chat'): void
 }>()
 
+const router = useRouter()
 const localMode = ref(props.mode)
 
 watch(() => props.mode, (newVal) => {
@@ -22,53 +24,48 @@ const setMode = (mode: string) => {
   localMode.value = mode
   emit('update:mode', mode)
 }
+
+const goBack = () => {
+  router.back()
+}
 </script>
 
 <template>
   <header class="workspace-header">
     <div class="header-left">
-      <div class="version-badge">V1.2</div>
+      <button class="back-btn" @click="goBack" title="返回上一页">
+        <ArrowLeft :size="20" />
+      </button>
     </div>
 
-    <div class="mode-toggle">
-      <button 
-        class="mode-btn" 
-        :class="{ active: localMode === 'dialogue' }"
-        @click="setMode('dialogue')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
-        对话
-      </button>
-      <button 
-        class="mode-btn" 
-        :class="{ active: localMode === 'expert' }"
-        @click="setMode('expert')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="16 18 22 12 16 6"></polyline>
-          <polyline points="8 6 2 12 8 18"></polyline>
-        </svg>
-        专业
-      </button>
+    <div class="header-center">
+      <h1 class="header-title">{{ title }}</h1>
     </div>
 
     <div class="header-right">
-      <button class="header-btn" @click="emit('toggle-chat')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-        </svg>
-        AI 助手
-      </button>
-      <button class="header-btn primary">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-          <polyline points="17 21 17 13 7 13 7 21"></polyline>
-          <polyline points="7 3 7 8 15 8"></polyline>
-        </svg>
-        保存
-      </button>
+      <div class="mode-toggle">
+        <button 
+          class="mode-btn" 
+          :class="{ active: localMode === 'dialogue' }"
+          @click="setMode('dialogue')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          对话
+        </button>
+        <button 
+          class="mode-btn" 
+          :class="{ active: localMode === 'expert' }"
+          @click="setMode('expert')"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          专业
+        </button>
+      </div>
     </div>
   </header>
 </template>
@@ -76,13 +73,13 @@ const setMode = (mode: string) => {
 <style scoped>
 .workspace-header {
     height: 64px;
-    padding: 0 16px; /* Increased padding */
+    padding: 0 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: transparent;
-    border-bottom: 1px solid rgba(0,0,0,0.05); /* Subtle divider */
-    margin-bottom: 8px; /* Add some space below header */
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    margin-bottom: 8px;
     position: relative;
 }
 
@@ -90,29 +87,68 @@ const setMode = (mode: string) => {
     display: flex;
     align-items: center;
     gap: 16px;
+    min-width: 0;
+    flex: 0 0 auto;
 }
 
-.version-badge {
-    padding: 2px 8px;
-    background: var(--bg-surface); /* White badge */
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    box-shadow: var(--shadow-sm);
+.back-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    border-radius: 50%;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-sm);
+}
+
+.back-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+    transform: translateX(-2px);
+}
+
+.header-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 40%;
+}
+
+.header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    gap: 12px;
 }
 
 .mode-toggle {
     display: flex;
-    background: var(--bg-surface);
+    background: var(--bg-secondary);
     padding: 4px;
-    border-radius: 20px; /* Pill shape */
+    border-radius: 24px;
     gap: 4px;
-    border: 1px solid var(--border-subtle);
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    border: 1px solid rgba(0,0,0,0.04);
 }
 
 .mode-btn {
@@ -122,54 +158,32 @@ const setMode = (mode: string) => {
     padding: 6px 16px;
     border: none;
     background: transparent;
-    border-radius: 16px;
-    font-size: 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.mode-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255,255,255,0.5);
 }
 
 .mode-btn.active {
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-sm);
-    font-weight: 500;
+    background: #ffffff;
+    color: var(--primary);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    font-weight: 600;
 }
 
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+/* Specific colors for different modes to be distinctive */
+.mode-btn:first-child.active {
+    color: #3b82f6; /* Blue for Dialogue */
 }
 
-.header-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border: 1px solid transparent;
-    background: var(--bg-surface);
-    border-radius: 24px; /* Pill shape */
-    font-size: 14px;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    box-shadow: var(--shadow-sm);
-}
-
-.header-btn:hover {
-    background: var(--bg-primary);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
-
-.header-btn.primary {
-    background: var(--text-primary); /* Black button like NotebookLM */
-    color: var(--text-inverse);
-}
-
-.header-btn.primary:hover {
-    background: #000000;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.mode-btn:last-child.active {
+    color: #8b5cf6; /* Purple for Expert */
 }
 </style>

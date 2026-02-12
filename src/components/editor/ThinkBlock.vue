@@ -22,6 +22,12 @@ const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
 }
 
+const collapse = () => {
+  isExpanded.value = false
+}
+
+defineExpose({ collapse })
+
 const htmlContent = computed(() => {
   return md.render(props.content)
 })
@@ -38,7 +44,12 @@ const htmlContent = computed(() => {
         <component :is="isExpanded ? ChevronUp : ChevronDown" :size="16" />
       </button>
     </div>
-    <div v-show="isExpanded" class="think-content markdown-body" :class="{ scrollable }" v-html="htmlContent"></div>
+    <div 
+      class="think-content-wrapper" 
+      :class="{ collapsed: !isExpanded }"
+    >
+      <div class="think-content markdown-body" :class="{ scrollable }" v-html="htmlContent"></div>
+    </div>
   </div>
 </template>
 
@@ -97,6 +108,19 @@ const htmlContent = computed(() => {
 .toggle-btn:hover {
   background-color: #e2e8f0;
   color: #475569;
+}
+
+.think-content-wrapper {
+  max-height: 2000px; /* Arbitrary large height */
+  opacity: 1;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.think-content-wrapper.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding: 0; /* To ensure total collapse if padding was on wrapper */
 }
 
 .think-content {

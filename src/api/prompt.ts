@@ -9,11 +9,30 @@ export function getPrompts(params: PromptListParams) {
   })
 }
 
+// Helper to map backend Tag structure to frontend TagItem
+const mapTag = (tag: any): TagItem => ({
+  id: tag.id,
+  name: tag.tagName || tag.name, // Handle backend 'tagName' vs frontend 'name'
+  parentId: tag.parentId,
+  sortOrder: tag.sortOrder || 0,
+  children: tag.children?.map(mapTag) || [],
+  count: tag.count,
+  icon: tag.icon,
+  departmentId: tag.departmentId ?? tag.department_id // Support both camelCase and snake_case
+})
+
 export function getTagsTree() {
-  return request<any, TagItem[]>({
+  return request<any, any[]>({
     url: '/java/v1/tags/tree',
     method: 'get'
-  })
+  }).then(data => data.map(mapTag))
+}
+
+export function getUserTagsTree() {
+  return request<any, any[]>({
+    url: '/java/v1/tags/user/tree',
+    method: 'get'
+  }).then(data => data.map(mapTag))
 }
 
 export function getPromptDetail(id: number) {
@@ -26,6 +45,13 @@ export function getPromptDetail(id: number) {
 export function toggleFavorite(id: number) {
   return request<any, boolean>({
     url: `/java/v1/prompts/${id}/favorite`,
+    method: 'post'
+  })
+}
+
+export function toggleLike(id: number) {
+  return request<any, boolean>({
+    url: `/java/v1/prompts/${id}/like`,
     method: 'post'
   })
 }

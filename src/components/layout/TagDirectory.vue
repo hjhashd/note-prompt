@@ -1,21 +1,45 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { getTagsTree } from '@/api/prompt'
 import type { TagItem } from '@/types/prompt'
+import * as LucideIcons from 'lucide-vue-next'
 
-const props = withDefaults(defineProps<{ collapsed?: boolean }>(), {
-  collapsed: false
+const props = withDefaults(defineProps<{ 
+  collapsed?: boolean
+  modelValue?: number | null 
+}>(), {
+  collapsed: false,
+  modelValue: null
 })
 
 const emit = defineEmits<{
   (e: 'toggleCollapse'): void
   (e: 'select', id: number | null): void
+  (e: 'update:modelValue', id: number | null): void
 }>()
 
 const expandedItems = ref<number[]>([])
-const activeCategory = ref<number | null>(null)
+const activeCategory = ref<number | null>(props.modelValue)
 const searchQuery = ref('')
 const categories = ref<TagItem[]>([])
+
+const getIcon = (name: string) => {
+  if (!name) return null
+  // Map old Element UI icons to Lucide equivalents if needed
+  if (name.startsWith('el-icon-')) {
+    const map: Record<string, string> = {
+      'el-icon-folder': 'Folder',
+      'el-icon-office-building': 'Building2',
+      'el-icon-document': 'BookOpen'
+    }
+    name = map[name] || 'Folder'
+  }
+  return (LucideIcons as any)[name] || LucideIcons.Folder
+}
+
+watch(() => props.modelValue, (newVal) => {
+  activeCategory.value = newVal
+})
 
 const toggleTreeItem = (id: number) => {
   const index = expandedItems.value.indexOf(id)
@@ -27,16 +51,59 @@ const toggleTreeItem = (id: number) => {
 }
 
 const selectCategory = (id: number | null) => {
-  activeCategory.value = id
-  emit('select', id)
+  // If id is 0 (All Departments), treat as null
+  const effectiveId = id === 0 ? null : id
+  activeCategory.value = effectiveId
+  emit('select', effectiveId)
+  emit('update:modelValue', effectiveId)
 }
 
 const fetchTags = async () => {
   try {
     const data = await getTagsTree()
-    categories.value = data
-    // Expand root items by default
-    expandedItems.value = data.map(item => item.id)
+    console.log('[TagDirectory] Raw data from API:', JSON.stringify(data, null, 2))
+    
+    let rootItems = data
+    // Flatten root logic: Remove "All Company" top level if present
+    if (data && data.length > 0 && data[0].children) {
+      console.log('[TagDirectory] First node has children, unwrapping...')
+      rootItems = data[0].children
+    }
+    
+    console.log('[TagDirectory] Root items after flatten:', rootItems)
+    
+    // Filter logic: Recursively keep items that are departments (have departmentId)
+    // We create a deep copy with filtering to ensure we don't mutate the original data if referenced elsewhere (though here it's fresh)
+    const filterDepartments = (nodes: TagItem[]): TagItem[] => {
+      return nodes
+        .filter(item => {
+          const hasDeptId = item.departmentId !== null && item.departmentId !== undefined
+          console.log(`[TagDirectory] Filtering item ${item.name} (id=${item.id}): departmentId=${item.departmentId}, hasDeptId=${hasDeptId}`)
+          return hasDeptId
+        })
+        .map(item => ({
+          ...item,
+          children: item.children ? filterDepartments(item.children) : []
+        }))
+    }
+
+    const deptItems = filterDepartments(rootItems)
+    console.log('[TagDirectory] Filtered deptItems:', deptItems)
+    console.log('[TagDirectory] deptItems length:', deptItems.length)
+
+    // Add "All Departments" node
+    const allDeptNode: TagItem = {
+      id: 0, // Special ID for UI handling, maps to null
+      name: '全部部门',
+      icon: 'LayoutGrid', // Uses Lucide icon
+      children: []
+    }
+    
+    categories.value = [allDeptNode, ...deptItems]
+    console.log('[TagDirectory] Final categories:', categories.value)
+    
+    // Expand root items by default (excluding 'All' if it has no children, which it doesn't)
+    expandedItems.value = deptItems.map(item => item.id)
   } catch (error) {
     console.error('Failed to fetch tags:', error)
   }
@@ -51,7 +118,7 @@ onMounted(() => {
   <div class="tag-directory" :class="{ collapsed: props.collapsed }">
     <div class="directory-header">
       <div class="header-row">
-        <h2 class="directory-title" v-if="!props.collapsed">分类目录</h2>
+        <h2 class="directory-title" v-if="!props.collapsed">部门分类</h2>
         <button
           class="collapse-btn"
           type="button"
@@ -81,28 +148,12 @@ onMounted(() => {
 
     <div v-if="!props.collapsed" class="directory-content custom-scrollbar">
       <div class="tree-root">
-        <!-- All Categories Item -->
-        <div class="tree-item-wrapper">
-           <div 
-              class="tree-item root-item"
-              :class="{ active: activeCategory === null }"
-              @click="selectCategory(null)"
-            >
-              <span class="item-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                </svg>
-              </span>
-              <span class="item-name">全部提示词</span>
-           </div>
-        </div>
-
         <template v-for="category in categories" :key="category.id">
           <!-- Root Item -->
           <div class="tree-item-wrapper">
             <div 
               class="tree-item root-item"
-              :class="{ active: activeCategory === category.id }"
+              :class="{ active: (category.id === 0 && activeCategory === null) || activeCategory === category.id }"
               @click="selectCategory(category.id)"
             >
               <span class="expand-icon" 
@@ -113,11 +164,6 @@ onMounted(() => {
                   :style="{ transform: expandedItems.includes(category.id) ? 'rotate(90deg)' : 'rotate(0)' }"
                 >
                   <polyline points="9 18 15 12 9 6"></polyline>
-                </svg>
-              </span>
-              <span class="item-icon" v-if="category.icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path :d="category.icon" />
                 </svg>
               </span>
               <span class="item-name">{{ category.name }}</span>
@@ -176,8 +222,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(0,0,0,0.02);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
   transition: all var(--transition-normal);
 }
 
