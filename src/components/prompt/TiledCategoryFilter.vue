@@ -56,20 +56,15 @@ const updateChildTags = () => {
     // For user tags, show all tags directly (no department hierarchy)
     sourceNodes = [...personalTags.value]
   } else if (props.parentId) {
-    // Get child departments
-    const parentNode = findNode(fullTree.value, props.parentId)
-    if (parentNode) {
-      sourceNodes = [...(parentNode.children || [])]
-    }
-    
-    // Get all descendant department IDs (including current department)
+    // When a department is selected, only show personal tags under this department
+    // Don't show child departments (they are already shown in the left sidebar)
     const descendantIds = getDescendantIds(fullTree.value, props.parentId)
-    
-    // Add personal tags that have department_id matching any descendant
+
+    // Only show personal tags that have department_id matching any descendant
     const matchingPersonalTags = personalTags.value.filter(
       tag => tag.departmentId && descendantIds.includes(tag.departmentId)
     )
-    sourceNodes = [...sourceNodes, ...matchingPersonalTags]
+    sourceNodes = [...matchingPersonalTags]
   } else {
     // When "All Departments" is selected (parentId is null), show all personal tags
     sourceNodes = [...personalTags.value]
@@ -177,7 +172,7 @@ const isDeletingTag = ref(false)
 
 // 标签折叠相关
 const isExpanded = ref(false)
-const MAX_VISIBLE_TAGS = 8 // 默认显示的标签数量
+const MAX_VISIBLE_TAGS = 16 // 默认显示的标签数量
 
 const visibleTags = computed(() => {
   if (isExpanded.value || childTags.value.length <= MAX_VISIBLE_TAGS) {
