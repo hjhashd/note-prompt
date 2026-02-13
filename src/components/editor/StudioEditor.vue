@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { Undo2, Redo2, Trash2 } from 'lucide-vue-next'
+import { Undo2, Redo2, Trash2, Sparkles, Play } from 'lucide-vue-next'
 import CopyButton from '@/components/common/CopyButton.vue'
 import { useToast } from '@/composables/useToast'
 
@@ -223,6 +223,13 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
         </svg>
         JSON格式
       </button>
+
+      <div class="toolbar-spacer"></div>
+
+      <button class="pill-btn primary" @click="emit('open-save')">
+        <Save :size="14" />
+        保存
+      </button>
     </div>
     
     <div class="editor-content">
@@ -255,10 +262,7 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
       </div>
       <div class="footer-right">
         <button class="action-btn ai-btn" @click="handleOptimizeClick" :disabled="isOptimizing">
-          <svg v-if="!isOptimizing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.21 1.21 0 0 0 1.72 0L21.64 5.36a1.21 1.21 0 0 0 0-1.72Z"></path>
-            <path d="m14 7 3 3"></path>
-          </svg>
+          <Sparkles v-if="!isOptimizing" :size="16" />
           <!-- Loading Spinner -->
           <svg v-else class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
@@ -266,9 +270,7 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
           {{ isOptimizing ? '优化中...' : 'AI 优化' }}
         </button>
         <button class="action-btn test-btn" @click="emit('open-config')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-          </svg>
+          <Play :size="16" />
           运行测试
         </button>
       </div>
@@ -365,6 +367,21 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
   background: var(--bg-primary);
   border-color: var(--border-subtle);
   color: var(--text-primary);
+}
+
+.pill-btn.primary {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.pill-btn.primary:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.toolbar-spacer {
+  flex: 1;
 }
 
 .editor-content {

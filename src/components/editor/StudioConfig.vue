@@ -228,6 +228,10 @@ const runTest = async () => {
   if (isTesting.value) return
 
   const preview = renderedPrompt.value
+  if (!preview.trim()) {
+    toast('请先填写提示词内容', 'warning')
+    return
+  }
   
   emit('run-test', preview)
   
@@ -419,7 +423,7 @@ const runTest = async () => {
           <div class="config-group">
             <div class="group-header">
               <span>快速测试</span>
-              <button class="run-btn-sm" @click.stop="runTest" :disabled="isTesting">
+              <button class="run-btn-sm" type="button" @click.stop="runTest" :disabled="isTesting">
                 <svg v-if="!isTesting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
@@ -495,7 +499,7 @@ const runTest = async () => {
                 </svg>
             </div>
             <div class="empty-text">暂无测试结果</div>
-            <button class="run-btn-lg" @click="runTest" :disabled="isTesting">
+            <button class="run-btn-lg" type="button" @click="runTest" :disabled="isTesting">
                 立即运行
             </button>
         </div>
@@ -897,6 +901,9 @@ const runTest = async () => {
     line-height: 1.6;
     color: #374151;
     will-change: transform; /* Hardware acceleration */
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 100%;
 }
 
 /* Exquisite Loading State */
@@ -1008,6 +1015,8 @@ const runTest = async () => {
 :deep(.markdown-body pre) {
     background-color: #f6f8fa;
     border-radius: 6px;
+    overflow-x: auto;
+    max-width: 100%;
 }
 
 .scroll-bottom-btn {

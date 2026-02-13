@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { getTagsTree } from '@/api/prompt'
 import type { TagItem } from '@/types/prompt'
-import * as LucideIcons from 'lucide-vue-next'
 
 const props = withDefaults(defineProps<{ 
   collapsed?: boolean
@@ -22,20 +21,29 @@ const expandedItems = ref<number[]>([])
 const activeCategory = ref<number | null>(props.modelValue)
 const searchQuery = ref('')
 const categories = ref<TagItem[]>([])
+const isSearching = computed(() => searchQuery.value.trim().length > 0)
 
-const getIcon = (name: string) => {
-  if (!name) return null
-  // Map old Element UI icons to Lucide equivalents if needed
-  if (name.startsWith('el-icon-')) {
-    const map: Record<string, string> = {
-      'el-icon-folder': 'Folder',
-      'el-icon-office-building': 'Building2',
-      'el-icon-document': 'BookOpen'
+const filteredCategories = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) return categories.value
+
+  const filterNodes = (nodes: TagItem[]): TagItem[] => {
+    const result: TagItem[] = []
+    for (const node of nodes) {
+      const children = node.children ? filterNodes(node.children) : []
+      const name = node.name ? node.name.toLowerCase() : ''
+      if (name.includes(query) || children.length > 0) {
+        result.push({
+          ...node,
+          children
+        })
+      }
     }
-    name = map[name] || 'Folder'
+    return result
   }
-  return (LucideIcons as any)[name] || LucideIcons.Folder
-}
+
+  return filterNodes(categories.value)
+})
 
 watch(() => props.modelValue, (newVal) => {
   activeCategory.value = newVal
@@ -61,37 +69,12 @@ const selectCategory = (id: number | null) => {
 const fetchTags = async () => {
   try {
     const data = await getTagsTree()
-    console.log('[TagDirectory] Raw data from API:', JSON.stringify(data, null, 2))
     
-    let rootItems = data
-    // Flatten root logic: Remove "All Company" top level if present
-    if (data && data.length > 0 && data[0].children) {
-      console.log('[TagDirectory] First node has children, unwrapping...')
-      rootItems = data[0].children
-    }
-    
-    console.log('[TagDirectory] Root items after flatten:', rootItems)
-    
-    // Filter logic: Recursively keep items that are departments (have departmentId)
-    // We create a deep copy with filtering to ensure we don't mutate the original data if referenced elsewhere (though here it's fresh)
-    const filterDepartments = (nodes: TagItem[]): TagItem[] => {
-      return nodes
-        .filter(item => {
-          const hasDeptId = item.departmentId !== null && item.departmentId !== undefined
-          console.log(`[TagDirectory] Filtering item ${item.name} (id=${item.id}): departmentId=${item.departmentId}, hasDeptId=${hasDeptId}`)
-          return hasDeptId
-        })
-        .map(item => ({
-          ...item,
-          children: item.children ? filterDepartments(item.children) : []
-        }))
+    let rootItems = Array.isArray(data) ? data : []
+    if (rootItems.length > 0 && rootItems[0].children) {
+      rootItems = rootItems[0].children || []
     }
 
-    const deptItems = filterDepartments(rootItems)
-    console.log('[TagDirectory] Filtered deptItems:', deptItems)
-    console.log('[TagDirectory] deptItems length:', deptItems.length)
-
-    // Add "All Departments" node
     const allDeptNode: TagItem = {
       id: 0, // Special ID for UI handling, maps to null
       name: '全部部门',
@@ -99,11 +82,10 @@ const fetchTags = async () => {
       children: []
     }
     
-    categories.value = [allDeptNode, ...deptItems]
-    console.log('[TagDirectory] Final categories:', categories.value)
-    
-    // Expand root items by default (excluding 'All' if it has no children, which it doesn't)
-    expandedItems.value = deptItems.map(item => item.id)
+    categories.value = [allDeptNode, ...rootItems]
+    expandedItems.value = rootItems
+      .filter(item => item.children && item.children.length > 0)
+      .map(item => item.id)
   } catch (error) {
     console.error('Failed to fetch tags:', error)
   }
@@ -148,7 +130,7 @@ onMounted(() => {
 
     <div v-if="!props.collapsed" class="directory-content custom-scrollbar">
       <div class="tree-root">
-        <template v-for="category in categories" :key="category.id">
+        <template v-for="category in filteredCategories" :key="category.id">
           <!-- Root Item -->
           <div class="tree-item-wrapper">
             <div 
@@ -171,7 +153,7 @@ onMounted(() => {
             </div>
 
             <!-- Children -->
-            <div class="tree-children" v-if="expandedItems.includes(category.id)">
+            <div class="tree-children" v-if="isSearching || expandedItems.includes(category.id)">
               <div v-for="child in category.children" :key="child.id" class="child-wrapper">
                 <div 
                   class="tree-item child-item"
@@ -193,7 +175,7 @@ onMounted(() => {
                 </div>
 
                 <!-- Grandchildren -->
-                <div class="tree-children" v-if="expandedItems.includes(child.id) && child.children">
+                <div class="tree-children" v-if="(isSearching || expandedItems.includes(child.id)) && child.children">
                   <div 
                     v-for="subChild in child.children" 
                     :key="subChild.id"

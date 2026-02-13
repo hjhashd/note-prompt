@@ -13,6 +13,7 @@
     
     /* Accent Colors - Custom Blue */
     --primary: #3B82F6;       
+    --primary-rgb: 59, 130, 246;
     --primary-hover: #2563EB;
     --primary-light: #EFF6FF; /* Active state background */
     

@@ -33,8 +33,9 @@ const goBack = () => {
 <template>
   <header class="workspace-header">
     <div class="header-left">
-      <button class="back-btn" @click="goBack" title="返回上一页">
-        <ArrowLeft :size="20" />
+      <button class="back-btn" @click="goBack" title="返回">
+        <ArrowLeft :size="16" />
+        <span class="back-label">返回</span>
       </button>
     </div>
 
@@ -92,25 +93,28 @@ const goBack = () => {
 }
 
 .back-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
+    gap: 8px;
+    padding: 6px 12px;
     border: 1px solid var(--border-subtle);
     background: var(--bg-surface);
-    border-radius: 50%;
-    color: var(--text-secondary);
+    border-radius: 8px;
+    color: var(--text-primary);
     cursor: pointer;
     transition: all var(--transition-fast);
     box-shadow: var(--shadow-sm);
 }
 
 .back-btn:hover {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
+    background: var(--bg-primary);
     border-color: var(--border-default);
-    transform: translateX(-2px);
+    transform: translateY(-1px);
+}
+
+.back-label {
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .header-center {

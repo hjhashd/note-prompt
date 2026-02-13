@@ -1,23 +1,21 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onUnmounted, onMounted, computed } from 'vue'
+import { ref, nextTick, watch, onUnmounted, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { chatStream, optimizeStream, autoGenerateTitle } from '@/api/lyf-ai'
+import { chatStream, autoGenerateTitle, regenerateChatStream } from '@/api/lyf-ai'
 import { getPromptDetail } from '@/api/prompt'
 import AiContentRenderer from '@/components/editor/AiContentRenderer.vue'
 import PromptReferenceCard from '@/components/editor/PromptReferenceCard.vue'
-import { ArrowDown, FlaskConical, Code2, Save } from 'lucide-vue-next'
+import CopyButton from '@/components/common/CopyButton.vue'
+import { ArrowDown, FlaskConical, Code2, Save, Sparkles, SendHorizontal, Pencil, RotateCw, Square } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import { storeToRefs } from 'pinia'
-
-const props = defineProps<{
-  initialPrompt?: string
-}>()
 
 const emit = defineEmits<{
   (e: 'update:title', title: string): void
   (e: 'open-test', content: string): void
   (e: 'switch-expert', content: string): void
   (e: 'open-save', messageId: number | string): void
+  (e: 'prompt-loaded', prompt: any): void
 }>()
 
 const route = useRoute()
@@ -25,11 +23,45 @@ const router = useRouter()
 const messagesContainer = ref<HTMLElement | null>(null)
 
 const chatStore = useChatStore()
-const { messages, currentSessionId, isOptimizing, pendingQueue } = storeToRefs(chatStore)
+const { messages, currentSessionId, isOptimizing, pendingQueue, sessions } = storeToRefs(chatStore)
+
+const ensureRefPromptCard = async (sid: number) => {
+  const session = sessions.value.find(s => s.session_id === sid)
+  const refId = session?.ref_prompt_id
+  if (!refId) return
+
+  const exists = messages.value.some((m: any) => m?.type === 'prompt-ref' && m?.promptData?.id === refId)
+  if (exists) return
+
+  try {
+    const prompt = await getPromptDetail(refId)
+    emit('prompt-loaded', prompt)
+    messages.value.unshift({
+      id: Date.now(),
+      role: 'ai',
+      content: '已加载该提示词上下文，你可以直接使用或让我帮你优化：',
+      type: 'prompt-ref',
+      promptData: prompt
+    } as any)
+  } catch (e) {
+    console.error('Failed to load referenced prompt detail:', e)
+  }
+}
+
+watch([currentSessionId, sessions], ([sid]) => {
+  if (!sid) return
+  ensureRefPromptCard(sid)
+}, { immediate: true })
 
 // Scroll State Management
 const shouldAutoScroll = ref(true)
 const showScrollButton = ref(false)
+
+// Prevent duplicate submissions
+const isSending = ref(false)
+
+// Abort controller for stopping generation
+const abortController = ref<AbortController | null>(null)
 
 const handleScroll = () => {
   if (!messagesContainer.value) return
@@ -81,6 +113,8 @@ const scrollToBottom = async (force = false) => {
 const input = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
+const editingMessageId = ref<number | null>(null)
+
 const adjustInputHeight = () => {
   const textarea = inputRef.value
   if (!textarea) return
@@ -95,14 +129,6 @@ watch(input, () => {
   nextTick(adjustInputHeight)
 })
 
-const handleUsePrompt = (content: string) => {
-  input.value = content
-  nextTick(() => {
-    inputRef.value?.focus()
-    adjustInputHeight()
-  })
-}
-
 const handleOptimizePrompt = (content: string) => {
   input.value = content
   nextTick(() => {
@@ -111,8 +137,41 @@ const handleOptimizePrompt = (content: string) => {
   })
 }
 
+// Handle Enter key: Enter to send, Shift+Enter for new line
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendMessage()
+  }
+  // Shift+Enter will naturally insert a new line
+}
+
+// Stop generation
+const stopGeneration = () => {
+  if (abortController.value) {
+    abortController.value.abort()
+    abortController.value = null
+  }
+  isOptimizing.value = false
+  isSending.value = false
+  
+  // Mark the last AI message as no longer streaming
+  const lastAiMsg = messages.value.slice().reverse().find(m => m.role === 'ai' && m.isStreaming)
+  if (lastAiMsg) {
+    lastAiMsg.isStreaming = false
+  }
+}
+
 // Optimized Queue System
 let rafId: number | null = null
+const isPageVisible = ref(true)
+
+const handleVisibilityChange = () => {
+  isPageVisible.value = !document.hidden
+  if (isPageVisible.value && pendingQueue.value.length > 0 && !rafId) {
+    rafId = requestAnimationFrame(processQueue)
+  }
+}
 
 const processQueue = () => {
   if (pendingQueue.value.length === 0) {
@@ -120,10 +179,21 @@ const processQueue = () => {
     return
   }
 
-  // Calculate total pending size to adjust speed
+  if (!isPageVisible.value) {
+    for (const item of pendingQueue.value) {
+      const msg = messages.value.find(m => m.id === item.msgId)
+      if (msg) {
+        msg.content += item.text
+      }
+    }
+    pendingQueue.value = []
+    rafId = null
+    scrollToBottom()
+    return
+  }
+
   const totalPending = pendingQueue.value.reduce((acc, item) => acc + item.text.length, 0)
   
-  // Dynamic speed: If backlog is large, process faster.
   const charsPerFrame = totalPending > 1000 ? 100 : (totalPending > 200 ? 20 : 3)
   
   let charsProcessed = 0
@@ -134,11 +204,10 @@ const processQueue = () => {
     const msg = messages.value.find(m => m.id === item.msgId)
     
     if (!msg) {
-      pendingQueue.value.shift() // Invalid message, drop
+      pendingQueue.value.shift()
       continue
     }
 
-    // Determine how many chars to take from this item
     const remainingInItem = item.text.length
     const canTake = charsPerFrame - charsProcessed
     const take = Math.min(remainingInItem, canTake)
@@ -146,9 +215,8 @@ const processQueue = () => {
     const chunk = item.text.slice(0, take)
     msg.content += chunk
     
-    // Update item in queue
     if (take === remainingInItem) {
-      pendingQueue.value.shift() // Done with this item
+      pendingQueue.value.shift()
     } else {
       item.text = item.text.slice(take)
     }
@@ -167,13 +235,26 @@ const processQueue = () => {
 watch(() => messages.value.length, () => scrollToBottom(true))
 
 const sendMessage = async () => {
-  if (!input.value.trim() || isOptimizing.value) return
+  // Prevent duplicate submissions
+  if (!input.value.trim() || isOptimizing.value || isSending.value) return
+
+  if (editingMessageId.value) {
+    const editingMsg = messages.value.find(m => m.id === editingMessageId.value)
+    if (editingMsg && editingMsg.role === 'user') {
+      await handleResendUserMessage(editingMsg)
+      return
+    }
+    editingMessageId.value = null
+  }
   
+  isSending.value = true
   const prompt = input.value
+  input.value = ''
+  editingMessageId.value = null
+  
   const userMsg = { id: Date.now(), role: 'user', content: prompt }
   messages.value.push(userMsg)
   
-  input.value = ''
   isOptimizing.value = true
   
   // Create placeholder for AI response
@@ -188,11 +269,20 @@ const sendMessage = async () => {
   
   const currentAiMsgIndex = messages.value.length - 1
   
+  // Create AbortController for this request
+  abortController.value = new AbortController()
+  
   // Call real API
   const isFirstMessage = !currentSessionId.value
+  const routePromptId = route.query.promptId
+  let refPromptId: number | undefined
+  if (!currentSessionId.value && routePromptId) {
+    const parsed = parseInt(String(routePromptId))
+    if (!isNaN(parsed)) refPromptId = parsed
+  }
 
   await chatStream(
-    { query: prompt, session_id: currentSessionId.value || undefined },
+    { query: prompt, session_id: currentSessionId.value || undefined, ref_prompt_id: refPromptId },
     (chunk) => {
       // Push raw chunk to queue
       pendingQueue.value.push({ msgId: aiMsgId, text: chunk })
@@ -205,43 +295,47 @@ const sendMessage = async () => {
     async (meta) => {
       const sid = Number(meta?.session_id)
       if (!sid || currentSessionId.value) return
-      // Update session ID in store and reload sessions list
+      // Update session ID in store (loadSessions will be called at the end of stream)
       chatStore.currentSessionId = sid
-      await chatStore.loadSessions()
-      
+
       // Update URL
       const query: Record<string, any> = { ...route.query }
       query.session_id = String(sid)
+      delete query.promptId
       await router.replace({ query })
     },
     () => {
       // Stream finished
+      abortController.value = null
       const checkDone = async () => {
         if (pendingQueue.value.length === 0) {
           isOptimizing.value = false
+          isSending.value = false
           const msg = messages.value[currentAiMsgIndex]
           if (msg) msg.isStreaming = false
-          
+
           // Auto-generate title for the first message
           if (isFirstMessage && currentSessionId.value) {
             try {
               // Use user prompt + AI response as context (limit length to avoid huge payload)
               const aiContent = msg ? msg.content : ''
               const context = `User: ${prompt}\nAI: ${aiContent}`.slice(0, 2000)
-              
+
               const res = await autoGenerateTitle(currentSessionId.value, context)
               if (res.ok && res.new_title) {
                 // Update local title
                 emit('update:title', res.new_title)
-                // Update store sessions list
-                await chatStore.loadSessions()
               }
             } catch (e) {
               console.warn('Failed to auto-generate title:', e)
             }
-          } else {
-            // Reload sessions to update update_time
-            chatStore.loadSessions()
+          }
+          // Reload sessions to update title and update_time
+          await chatStore.loadSessions()
+
+          if (currentSessionId.value) {
+            await chatStore.loadSessionHistory(currentSessionId.value)
+            await ensureRefPromptCard(currentSessionId.value)
           }
         } else {
           requestAnimationFrame(checkDone)
@@ -251,15 +345,108 @@ const sendMessage = async () => {
     },
     (error) => {
       console.error('Chat error:', error)
+      abortController.value = null
       const msg = messages.value[currentAiMsgIndex]
       if (msg) {
         const errorText = '\n[错误: 无法获取响应]'
         pendingQueue.value.push({ msgId: aiMsgId, text: errorText })
       }
       isOptimizing.value = false
+      isSending.value = false
       if (msg) msg.isStreaming = false
       scrollToBottom()
-    }
+    },
+    abortController.value.signal
+  )
+}
+
+const handleEditUserMessage = (msg: any) => {
+  editingMessageId.value = msg.id
+  input.value = msg.content || ''
+  nextTick(() => {
+    inputRef.value?.focus()
+    adjustInputHeight()
+  })
+}
+
+const handleResendUserMessage = async (msg: any) => {
+  if (isOptimizing.value || isSending.value) return
+
+  const candidate = (editingMessageId.value === msg.id ? input.value : msg.content) || ''
+  const content = candidate.trim()
+  if (!content) return
+
+  if (!currentSessionId.value) {
+    input.value = content
+    await nextTick()
+    await sendMessage()
+    return
+  }
+
+  const sid = currentSessionId.value
+  if (!sid) return
+
+  isSending.value = true
+  isOptimizing.value = true
+
+  const idx = messages.value.findIndex(m => m.id === msg.id)
+  if (idx !== -1) {
+    messages.value[idx].content = content
+    messages.value.splice(idx + 1)
+  }
+
+  editingMessageId.value = null
+  input.value = ''
+
+  const aiMsgId = Date.now()
+  const aiMsg: any = {
+    id: aiMsgId,
+    role: 'ai',
+    content: '',
+    isStreaming: true
+  }
+  messages.value.push(aiMsg)
+  const currentAiMsgIndex = messages.value.length - 1
+
+  // Create AbortController for this request
+  abortController.value = new AbortController()
+
+  await regenerateChatStream(
+    { session_id: sid, message_id: msg.id, query: content },
+    (chunk) => {
+      pendingQueue.value.push({ msgId: aiMsgId, text: chunk })
+      if (!rafId) {
+        rafId = requestAnimationFrame(processQueue)
+      }
+    },
+    () => {
+      abortController.value = null
+      const checkDone = async () => {
+        if (pendingQueue.value.length === 0) {
+          isOptimizing.value = false
+          isSending.value = false
+          const m = messages.value[currentAiMsgIndex]
+          if (m) m.isStreaming = false
+          await chatStore.loadSessions()
+          await chatStore.loadSessionHistory(sid)
+          await ensureRefPromptCard(sid)
+        } else {
+          requestAnimationFrame(checkDone)
+        }
+      }
+      checkDone()
+    },
+    (error) => {
+      console.error('Failed to regenerate message:', error)
+      abortController.value = null
+      isOptimizing.value = false
+      isSending.value = false
+      const m = messages.value[currentAiMsgIndex]
+      if (m) m.isStreaming = false
+      chatStore.loadSessionHistory(sid)
+      ensureRefPromptCard(sid)
+    },
+    abortController.value.signal
   )
 }
 
@@ -268,9 +455,27 @@ defineExpose({
 })
 
 onMounted(async () => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   await chatStore.loadSessions()
   
-  // Priority 1: Check for promptId (New Chat from Prompt)
+  // Priority 1: Check for session_id (Existing Chat)
+  const routeSessionId = route.query.session_id
+  if (routeSessionId) {
+    const sid = parseInt(String(routeSessionId))
+    if (!isNaN(sid)) {
+      chatStore.currentSessionId = sid
+      await chatStore.loadSessionHistory(sid)
+      await ensureRefPromptCard(sid)
+      if (route.query.promptId) {
+        const query: Record<string, any> = { ...route.query }
+        delete query.promptId
+        await router.replace({ query })
+      }
+    }
+    return
+  }
+
+  // Priority 2: Check for promptId (New Chat from Prompt)
   const promptId = route.query.promptId
   if (promptId) {
     // Force reset to draft mode to avoid mixing with previous session
@@ -280,6 +485,9 @@ onMounted(async () => {
       const id = parseInt(promptId as string)
       if (!isNaN(id)) {
         const prompt = await getPromptDetail(id)
+        
+        // 通知父组件已加载提示词
+        emit('prompt-loaded', prompt)
         
         // Set draft title
         chatStore.draftTitle = prompt.title || '新对话'
@@ -295,27 +503,18 @@ onMounted(async () => {
     } catch (e) {
       console.error('Failed to load prompt detail:', e)
     }
-    return // Stop here, ignore session_id if promptId is present (user intent is to use prompt)
+    return
   }
-
-  // Priority 2: Check for session_id (Existing Chat)
-  const routeSessionId = route.query.session_id
-  if (routeSessionId) {
-    const sid = parseInt(String(routeSessionId))
-    if (!isNaN(sid)) {
-      chatStore.currentSessionId = sid
-      await chatStore.loadSessionHistory(sid)
-    }
-  } else {
-    // If no session ID and no prompt ID, check if we already have messages (from store)
-    // If not, reset to welcome. This prevents double welcome if store already has it.
-    if (!currentSessionId.value && messages.value.length === 0) {
-      chatStore.resetToWelcome()
-    }
+  
+  // If no session ID and no prompt ID, check if we already have messages (from store)
+  // If not, reset to welcome. This prevents double welcome if store already has it.
+  if (!currentSessionId.value && messages.value.length === 0) {
+    chatStore.resetToWelcome()
   }
 })
 
 onUnmounted(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (rafId) cancelAnimationFrame(rafId)
 })
 </script>
@@ -336,48 +535,67 @@ onUnmounted(() => {
             :class="msg.role"
           >
             <div v-if="msg.role === 'ai'" class="ai-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.21 1.21 0 0 0 1.72 0L21.64 5.36a1.21 1.21 0 0 0 0-1.72Z"></path>
-                <path d="m14 7 3 3"></path>
-                <path d="M5 6v4"></path>
-                <path d="M19 14v4"></path>
-                <path d="M10 2v2"></path>
-                <path d="M7 8H3"></path>
-                <path d="M21 16h-4"></path>
-                <path d="M11 3H9"></path>
-              </svg>
+              <Sparkles :size="18" />
             </div>
-            <div class="chat-bubble">
-              <div v-if="msg.type === 'prompt-ref' && msg.promptData">
-                <PromptReferenceCard 
-                  :prompt="msg.promptData" 
-                  compact
-                />
+            <div class="chat-message-content">
+              <div class="chat-bubble">
+                <div v-if="msg.type === 'prompt-ref' && msg.promptData">
+                  <PromptReferenceCard 
+                    :prompt="msg.promptData" 
+                    compact
+                  />
+                  <div class="message-actions" v-if="!msg.isStreaming">
+                    <CopyButton :text="msg.content" />
+                    <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
+                      <FlaskConical :size="14" />
+                      <span>测试</span>
+                    </button>
+                    <button class="action-btn-pill" @click="emit('switch-expert', msg.promptData.content || msg.content, msg.id)" title="切换到专家模式编辑">
+                      <Code2 :size="14" />
+                      <span>专家模式</span>
+                    </button>
+                    <button class="action-btn-pill" type="button" title="保存" @click="emit('open-save', msg.id)">
+                      <Save :size="14" />
+                      <span>保存</span>
+                    </button>
+                  </div>
+                </div>
+
+                <AiContentRenderer 
+                  v-else-if="msg.role === 'ai'" 
+                  :content="msg.content"
+                  :is-streaming="msg.isStreaming"
+                  :show-copy="msg.type !== 'welcome'"
+                >
+                  <template #actions v-if="!msg.isStreaming && msg.type !== 'welcome'">
+                    <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
+                      <FlaskConical :size="14" />
+                      <span>测试</span>
+                    </button>
+                    <button class="action-btn-pill" @click="emit('switch-expert', msg.content, msg.id)" title="切换到专家模式编辑">
+                      <Code2 :size="14" />
+                      <span>专家模式</span>
+                    </button>
+                    <button class="action-btn-pill" type="button" title="保存" @click="emit('open-save', msg.id)">
+                      <Save :size="14" />
+                      <span>保存</span>
+                    </button>
+                  </template>
+                </AiContentRenderer>
+
+                <div v-else-if="msg.role !== 'ai'" style="white-space: pre-wrap;">{{ msg.content }}</div>
               </div>
 
-              <AiContentRenderer 
-                v-else-if="msg.role === 'ai'" 
-                :content="msg.content"
-                :is-streaming="msg.isStreaming"
-                :show-copy="msg.type !== 'welcome'"
-              >
-                <template #actions v-if="!msg.isStreaming && msg.type !== 'welcome' && msg.type !== 'prompt-ref'">
-                  <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
-                    <FlaskConical :size="14" />
-                    <span>测试</span>
-                  </button>
-                  <button class="action-btn-pill" @click="emit('switch-expert', msg.content)" title="切换到专家模式编辑">
-                    <Code2 :size="14" />
-                    <span>专家模式</span>
-                  </button>
-                  <button class="action-btn-pill" type="button" title="保存" @click="emit('open-save', msg.id)">
-                    <Save :size="14" />
-                    <span>保存</span>
-                  </button>
-                </template>
-              </AiContentRenderer>
-
-              <div v-else-if="msg.role !== 'ai'" style="white-space: pre-wrap;">{{ msg.content }}</div>
+              <div v-if="msg.role === 'user' && msg.type !== 'welcome'" class="message-actions user-actions">
+                <button class="action-btn-pill" type="button" title="编辑这条消息" @click="handleEditUserMessage(msg)" :disabled="isOptimizing || isSending">
+                  <Pencil :size="14" />
+                  <span>编辑</span>
+                </button>
+                <button class="action-btn-pill" type="button" title="从这条消息开始重新生成" @click="handleResendUserMessage(msg)" :disabled="isOptimizing || isSending">
+                  <RotateCw :size="14" />
+                  <span>重新发送</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -400,15 +618,13 @@ onUnmounted(() => {
               ref="inputRef"
               class="chat-input" 
               v-model="input"
-              placeholder="描述你的需求，或使用 @ 引用提示词..."
-              @keydown.enter.prevent="sendMessage"
+              placeholder="描述你的需求，或使用 @ 引用提示词...&#10;Enter 发送，Shift+Enter 换行"
+              @keydown="handleKeydown"
             ></textarea>
             
             <div class="chat-input-actions">
               <button class="action-btn" title="优化" type="button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                </svg>
+                <Sparkles :size="16" />
               </button>
               <button class="action-btn" title="导入/导出" type="button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -417,11 +633,23 @@ onUnmounted(() => {
                   <line x1="12" y1="2" x2="12" y2="15"></line>
                 </svg>
               </button>
-              <button class="chat-send-btn" type="button" @click="sendMessage" :disabled="!input.trim() || isOptimizing">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
+              <button 
+                v-if="isOptimizing" 
+                class="chat-stop-btn" 
+                type="button" 
+                @click="stopGeneration" 
+                title="停止生成"
+              >
+                <Square :size="16" fill="currentColor" />
+              </button>
+              <button 
+                v-else
+                class="chat-send-btn" 
+                type="button" 
+                @click="sendMessage" 
+                :disabled="!input.trim()"
+              >
+                <SendHorizontal :size="16" />
               </button>
             </div>
           </div>
@@ -433,6 +661,17 @@ onUnmounted(() => {
 
 
 <style scoped>
+.message-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.message-actions.user-actions {
+  justify-content: flex-end;
+}
+
 .action-btn-pill {
   display: flex;
   align-items: center;
@@ -664,6 +903,17 @@ onUnmounted(() => {
   justify-content: flex-end;
 }
 
+.chat-message-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.chat-message.user .chat-message-content {
+  align-items: flex-end;
+}
+
 .ai-icon {
   width: 32px;
   height: 32px;
@@ -683,6 +933,9 @@ onUnmounted(() => {
   position: relative;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-subtle);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  min-width: 0; /* Ensure text truncation/wrapping works */
 }
 
 .chat-message.ai .chat-bubble {
@@ -699,41 +952,46 @@ onUnmounted(() => {
 }
 
 .chat-input-area {
-  padding: 20px;
-  background: transparent;
+  padding: 24px 20px 32px;
+  background: linear-gradient(to top, var(--bg-primary) 60%, transparent);
   display: flex;
-  justify-content: center; /* Center the input area */
+  justify-content: center;
   width: 100%;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
 }
 
 .chat-input-wrapper {
   position: relative;
   background: var(--bg-surface);
-  border-radius: 24px;
-  padding: 4px;
-  transition: all 0.2s;
-  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1.5px solid var(--gray-200);
   width: 100%;
-  max-width: 800px;
+  max-width: 850px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .chat-input-wrapper:focus-within {
   background: var(--bg-surface);
-  box-shadow: 0 0 0 2px var(--primary-light);
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.12);
   border-color: var(--primary);
+  transform: translateY(-2px);
 }
 
 .chat-input {
   width: 100%;
-  min-height: 48px;
+  min-height: 52px;
   max-height: 200px;
-  padding: 12px 100px 12px 16px;
+  padding: 12px 110px 12px 16px;
   border: none;
   background: transparent;
   resize: none;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
   overflow-y: auto;
   transition: height 0.1s ease;
 }
@@ -803,6 +1061,26 @@ onUnmounted(() => {
   background: var(--text-tertiary);
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.chat-stop-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.chat-stop-btn:hover {
+  transform: scale(1.05);
+  background: #dc2626;
 }
 
 /* 思考过程样式 */

@@ -8,6 +8,7 @@ export interface ChatRequest {
   query: string
   user_id?: string
   session_id?: number
+  ref_prompt_id?: number
 }
 
 export interface OptimizeRequest {
@@ -20,6 +21,12 @@ export interface TestRequest {
   user_input: string
 }
 
+export interface RegenerateRequest {
+  session_id: number
+  message_id: number
+  query: string
+}
+
 /**
  * 通用流式请求处理函数
  */
@@ -29,7 +36,8 @@ async function handleStreamRequest(
   onMessage: (content: string) => void,
   onMeta?: (meta: any) => void,
   onDone?: () => void,
-  onError?: (error: any) => void
+  onError?: (error: any) => void,
+  signal?: AbortSignal
 ) {
   const userStore = useUserStore()
   
@@ -40,7 +48,8 @@ async function handleStreamRequest(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${userStore.token}`
       },
-      body: JSON.stringify(params)
+      body: JSON.stringify(params),
+      signal
     })
 
     if (!response.ok) {
@@ -89,6 +98,12 @@ async function handleStreamRequest(
       }
     }
   } catch (error) {
+    // Check if the error is due to abort
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log('Stream aborted by user')
+      if (onDone) onDone()
+      return
+    }
     if (onError) onError(error)
     else console.error('Stream error:', error)
   }
@@ -102,7 +117,8 @@ export async function chatStream(
   onMessage: (content: string) => void,
   onMeta?: (meta: any) => void,
   onDone?: () => void,
-  onError?: (error: any) => void
+  onError?: (error: any) => void,
+  signal?: AbortSignal
 ) {
   return handleStreamRequest(
     '/api/python/ai/chat/v2/prompt_chat/stream',
@@ -110,7 +126,8 @@ export async function chatStream(
     onMessage,
     onMeta,
     onDone,
-    onError
+    onError,
+    signal
   )
 }
 
@@ -152,6 +169,24 @@ export async function testStream(
   )
 }
 
+export async function regenerateChatStream(
+  params: RegenerateRequest,
+  onMessage: (content: string) => void,
+  onDone?: () => void,
+  onError?: (error: any) => void,
+  signal?: AbortSignal
+) {
+  return handleStreamRequest(
+    `/api/python/ai/chat/v2/sessions/${params.session_id}/messages/${params.message_id}/regenerate/stream`,
+    { query: params.query },
+    onMessage,
+    undefined,
+    onDone,
+    onError,
+    signal
+  )
+}
+
 async function handleJsonRequest<TResponse = any>(
   url: string,
   options: RequestInit
@@ -180,6 +215,8 @@ export interface ChatSessionItem {
   create_time?: string
   update_time?: string
   status?: string
+  origin_prompt_id?: number
+  ref_prompt_id?: number
 }
 
 export interface ChatMessageItem {
@@ -207,6 +244,13 @@ export async function getChatSessionMessages(sessionId: number, limit = 200) {
   const url = new URL(`/api/python/ai/chat/v2/sessions/${sessionId}/messages`, window.location.origin)
   url.searchParams.set('limit', String(limit))
   return handleJsonRequest<ChatMessageItem[]>(url.pathname + url.search, { method: 'GET' })
+}
+
+export async function forkChatSession(sessionId: number, uptoMessageId: number, title?: string) {
+  return handleJsonRequest<ChatSessionItem>(`/api/python/ai/chat/v2/sessions/${sessionId}/fork`, {
+    method: 'POST',
+    body: JSON.stringify({ upto_message_id: uptoMessageId, title })
+  })
 }
 
 export async function renameChatSession(sessionId: number, title: string) {

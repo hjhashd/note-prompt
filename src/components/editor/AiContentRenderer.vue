@@ -218,6 +218,8 @@ const htmlAnswer = computed(() => {
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 :deep(.markdown-body p) {
@@ -233,6 +235,8 @@ const htmlAnswer = computed(() => {
   border-radius: 6px;
   padding: 16px;
   margin: 0; /* Reset margin as it's now in wrapper */
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* Code Block Enhancements */
@@ -243,6 +247,7 @@ const htmlAnswer = computed(() => {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   background-color: #f6f8fa;
+  max-width: 100%;
 }
 
 :deep(.code-block-header) {

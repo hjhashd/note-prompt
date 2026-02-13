@@ -9,7 +9,8 @@ import type { TagItem } from '@/types/prompt'
 const props = defineProps<{
   modelValue: number | null,
   parentId?: number | null,
-  type?: 'public' | 'user'
+  type?: 'public' | 'user',
+  enableDrag?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -189,6 +190,35 @@ const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
 }
 
+// 拖拽相关
+const draggedTag = ref<TagItem | null>(null)
+
+const handleDragStart = (e: DragEvent, item: TagItem) => {
+  console.log('[TiledCategoryFilter] Drag start:', item)
+  draggedTag.value = item
+  // 设置拖拽数据
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'copy'
+    const dragData = JSON.stringify({
+      tagId: item.id,
+      tagName: item.name
+    })
+    console.log('[TiledCategoryFilter] Drag data:', dragData)
+    e.dataTransfer.setData('application/json', dragData)
+    // 同时设置纯文本，增加兼容性
+    e.dataTransfer.setData('text/plain', dragData)
+    // 设置自定义拖拽图像（可选）
+    const el = e.target as HTMLElement
+    if (el) {
+      e.dataTransfer.setDragImage(el, 20, 20)
+    }
+  }
+}
+
+const handleDragEnd = () => {
+  draggedTag.value = null
+}
+
 // 判断是否可以删除标签（用户自己创建的标签）
 const canDeleteTag = (tag: TagItem): boolean => {
   // 个人标签都可以删除
@@ -251,6 +281,11 @@ const confirmDeleteTag = async () => {
 
 <template>
   <div class="tiled-filter-bar" v-if="childTags.length > 0">
+    <!-- 拖拽提示 - 只在启用拖拽时显示 -->
+    <div v-if="enableDrag" class="drag-hint">
+      <span class="hint-icon">💡</span>
+      <span class="hint-text">拖拽标签到提示词卡片上，快速为提示词添加标签</span>
+    </div>
     <div class="filter-row">
       <div class="row-options" :class="{ expanded: isExpanded }">
         <button
@@ -264,9 +299,17 @@ const confirmDeleteTag = async () => {
           v-for="item in visibleTags"
           :key="item.id"
           class="filter-chip deletable"
-          :class="{ active: activeTagId === item.id }"
+          :class="{ 
+            active: activeTagId === item.id, 
+            'draggable': enableDrag,
+            'is-dragging': enableDrag && draggedTag?.id === item.id 
+          }"
+          :draggable="enableDrag"
           @click="handleSelect(item.id, item)"
+          @dragstart="enableDrag && handleDragStart($event, item)"
+          @dragend="enableDrag && handleDragEnd"
         >
+          <span v-if="enableDrag" class="drag-handle" title="拖拽到提示词卡片">⋮⋮</span>
           <span class="tag-name">{{ item.name }}</span>
           <span
             v-if="canDeleteTag(item)"
@@ -381,7 +424,7 @@ const confirmDeleteTag = async () => {
   background: var(--bg-secondary);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -438,6 +481,65 @@ const confirmDeleteTag = async () => {
 .filter-chip.expand-btn:hover {
   background: var(--bg-secondary);
   border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* 拖拽相关样式 */
+.drag-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08) 0%, rgba(var(--primary-rgb), 0.04) 100%);
+  border-radius: 8px;
+  border: 1px dashed rgba(var(--primary-rgb), 0.3);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.hint-icon {
+  font-size: 16px;
+}
+
+.hint-text {
+  flex: 1;
+}
+
+.filter-chip.draggable {
+  position: relative;
+  cursor: grab;
+  padding-left: 28px;
+}
+
+.filter-chip.draggable:active {
+  cursor: grabbing;
+}
+
+.filter-chip.draggable.is-dragging {
+  transform: scale(1.05) rotate(1.5deg);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--primary);
+  background: var(--bg-surface);
+  color: var(--primary);
+  z-index: 100;
+  cursor: grabbing;
+}
+
+.drag-handle {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: -2px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.filter-chip.draggable:hover .drag-handle {
+  opacity: 1;
   color: var(--primary);
 }
 

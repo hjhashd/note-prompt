@@ -55,3 +55,19 @@ export function toggleLike(id: number) {
     method: 'post'
   })
 }
+
+export function batchSharePrompts(ids: number[]) {
+  return request<any, void>({
+    url: '/java/v1/prompts/batch-share',
+    method: 'post',
+    data: ids
+  })
+}
+
+export function batchUnsharePrompts(ids: number[]) {
+  return request<any, void>({
+    url: '/java/v1/prompts/batch-unshare',
+    method: 'post',
+    data: ids
+  })
+}

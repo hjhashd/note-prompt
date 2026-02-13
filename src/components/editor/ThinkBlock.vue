@@ -139,6 +139,8 @@ const htmlContent = computed(() => {
 :deep(.markdown-body) {
   max-width: none !important;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 :deep(.markdown-body p) {
@@ -168,6 +170,7 @@ const htmlContent = computed(() => {
   border-radius: 6px;
   overflow: auto;
   margin-bottom: 10px;
+  max-width: 100%;
 }
 
 :deep(.markdown-body pre code) {

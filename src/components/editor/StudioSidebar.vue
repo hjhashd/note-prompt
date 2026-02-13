@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useChatStore } from '@/stores/chat'
 import { storeToRefs } from 'pinia'
-import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, FolderOpen, Tag, Bookmark, Layers, Sparkles } from 'lucide-vue-next'
-import { ref, onMounted, watch } from 'vue'
+import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, FolderOpen, Tag, Layers, Sparkles, BookmarkCheck } from 'lucide-vue-next'
+import { ref, onMounted, computed } from 'vue'
 import { getUserTagsTree } from '@/api/prompt'
 import { getPrompts } from '@/api/prompt'
 import type { TagItem, PromptItem } from '@/types/prompt'
@@ -13,11 +13,20 @@ import RenameModal from '@/components/common/RenameModal.vue'
 const chatStore = useChatStore()
 const { sessions, currentSessionId } = storeToRefs(chatStore)
 const isTagsCollapsed = ref(false)
+const isSavedCollapsed = ref(false)
+const isHistoryCollapsed = ref(false)
 const userTags = ref<TagItem[]>([])
 const selectedTagId = ref<number | null>(null)
 const promptResults = ref<PromptItem[]>([])
 const promptsLoading = ref(false)
-const viewMode = ref<'sessions' | 'prompts'>('sessions')
+
+// 分离已保存提示词的会话和普通会话
+const savedPromptSessions = computed(() => 
+  sessions.value.filter(s => s.origin_prompt_id)
+)
+const normalSessions = computed(() => 
+  sessions.value.filter(s => !s.origin_prompt_id)
+)
 
 // Modal states
 const showDeleteModal = ref(false)
@@ -42,14 +51,14 @@ onMounted(async () => {
 
 const handleNewChat = () => {
   selectedTagId.value = null
-  viewMode.value = 'sessions'
+  promptResults.value = []
   chatStore.createNewSession()
   emit('new-chat')
 }
 
 const handleSwitchSession = (id: number) => {
   selectedTagId.value = null
-  viewMode.value = 'sessions'
+  promptResults.value = []
   chatStore.switchToSession(id)
   emit('switch-session', id)
 }
@@ -103,12 +112,10 @@ const handleSelectTag = async (tagId: number | null) => {
   selectedTagId.value = tagId
   
   if (tagId === null) {
-    viewMode.value = 'sessions'
     promptResults.value = []
     return
   }
   
-  viewMode.value = 'prompts'
   promptsLoading.value = true
   
   try {
@@ -132,12 +139,6 @@ const handleSelectTag = async (tagId: number | null) => {
 const handleSelectPrompt = (prompt: PromptItem) => {
   emit('select-prompt', prompt)
 }
-
-const handleBackToSessions = () => {
-  selectedTagId.value = null
-  viewMode.value = 'sessions'
-  promptResults.value = []
-}
 </script>
 
 <template>
@@ -151,56 +152,17 @@ const handleBackToSessions = () => {
 
     <div class="sidebar-content">
       <div class="sidebar-section">
-        <div class="sidebar-section-title">
-          <template v-if="viewMode === 'prompts'">
-            <button class="back-btn" @click="handleBackToSessions">
-              <ChevronRight :size="14" class="back-icon" />
-              <span>返回对话</span>
+        <!-- 标签过滤结果区域 -->
+        <template v-if="selectedTagId !== null">
+          <div class="sidebar-section-title tag-filter-title">
+            <span class="filter-label">
+              <Tag :size="14" class="filter-icon" />
+              标签筛选结果
+            </span>
+            <button class="clear-filter-btn" @click="handleSelectTag(null)">
+              清除筛选
             </button>
-          </template>
-          <template v-else>
-            <span>对话记录</span>
-          </template>
-        </div>
-        
-        <template v-if="viewMode === 'sessions'">
-          <div class="prompt-list">
-            <div
-              v-for="session in sessions"
-              :key="session.session_id"
-              class="prompt-card"
-              :class="{ 
-                active: session.session_id === currentSessionId, 
-                saved: session.status === 1 || session.status === 'completed' 
-              }"
-              @click="handleSwitchSession(session.session_id)"
-            >
-              <div class="prompt-card-header">
-                <div class="prompt-card-title">
-                  <MessageSquare :size="16" class="prompt-card-icon" />
-                  <span class="text-truncate">{{ session.title || '新对话' }}</span>
-                </div>
-                <div class="card-actions">
-                  <button class="icon-btn" @click="handleRenameSession($event, session.session_id, session.title)">
-                    <Pencil :size="12" />
-                  </button>
-                  <button class="icon-btn danger" @click="handleDeleteSession($event, session)">
-                    <Trash2 :size="12" />
-                  </button>
-                </div>
-              </div>
-              <div v-if="session.status === 1 || session.status === 'completed'" class="saved-indicator">
-                <Sparkles :size="10" class="sparkle-icon" />
-                <span>已存为提示词</span>
-              </div>
-            </div>
-            <div v-if="sessions.length === 0" class="empty-state">
-              暂无历史记录
-            </div>
           </div>
-        </template>
-        
-        <template v-else>
           <div class="prompt-list">
             <div v-if="promptsLoading" class="loading-state">
               加载中...
@@ -227,9 +189,99 @@ const handleBackToSessions = () => {
             </div>
           </div>
         </template>
+        
+        <!-- 正常对话列表区域 -->
+        <template v-else>
+          <!-- 已保存的提示词区域 -->
+          <div v-if="savedPromptSessions.length > 0" class="saved-prompts-section">
+            <div 
+              class="section-subtitle collapsible"
+              @click="isSavedCollapsed = !isSavedCollapsed"
+            >
+              <div class="subtitle-content">
+                <BookmarkCheck :size="14" class="subtitle-icon" />
+                <span>已保存的提示词</span>
+              </div>
+              <ChevronRight 
+                :size="14" 
+                class="collapse-icon"
+                :class="{ rotated: !isSavedCollapsed }"
+              />
+            </div>
+            <div class="prompt-list saved-list" v-show="!isSavedCollapsed">
+              <div
+                v-for="session in savedPromptSessions"
+                :key="session.session_id"
+                class="prompt-card is-saved-prompt"
+                :class="{ active: session.session_id === currentSessionId }"
+                @click="handleSwitchSession(session.session_id)"
+              >
+                <div class="prompt-card-header">
+                  <div class="prompt-card-title">
+                    <Sparkles :size="16" class="prompt-card-icon saved-icon" />
+                    <span class="text-truncate">{{ session.title || '新对话' }}</span>
+                  </div>
+                  <div class="card-actions">
+                    <button class="icon-btn" @click="handleRenameSession($event, session.session_id, session.title)">
+                      <Pencil :size="12" />
+                    </button>
+                    <button class="icon-btn danger" @click="handleDeleteSession($event, session)">
+                      <Trash2 :size="12" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 普通对话记录区域 -->
+          <div class="normal-sessions-section">
+            <div 
+              class="section-subtitle collapsible"
+              @click="isHistoryCollapsed = !isHistoryCollapsed"
+            >
+              <div class="subtitle-content">
+                <MessageSquare :size="14" class="subtitle-icon" />
+                <span>对话记录</span>
+              </div>
+              <ChevronRight 
+                :size="14" 
+                class="collapse-icon"
+                :class="{ rotated: !isHistoryCollapsed }"
+              />
+            </div>
+            <div class="prompt-list" v-show="!isHistoryCollapsed">
+              <div
+                v-for="session in normalSessions"
+                :key="session.session_id"
+                class="prompt-card"
+                :class="{ active: session.session_id === currentSessionId }"
+                @click="handleSwitchSession(session.session_id)"
+              >
+                <div class="prompt-card-header">
+                  <div class="prompt-card-title">
+                    <MessageSquare :size="16" class="prompt-card-icon" />
+                    <span class="text-truncate">{{ session.title || '新对话' }}</span>
+                  </div>
+                  <div class="card-actions">
+                    <button class="icon-btn" @click="handleRenameSession($event, session.session_id, session.title)">
+                      <Pencil :size="12" />
+                    </button>
+                    <button class="icon-btn danger" @click="handleDeleteSession($event, session)">
+                      <Trash2 :size="12" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div v-if="normalSessions.length === 0 && savedPromptSessions.length === 0" class="empty-state">
+                暂无历史记录
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
 
-      <div class="sidebar-section">
+      <div class="sidebar-section tags-section">
         <div 
           class="sidebar-section-title collapsible" 
           @click="isTagsCollapsed = !isTagsCollapsed"
@@ -244,7 +296,7 @@ const handleBackToSessions = () => {
         <div class="template-tree" v-show="!isTagsCollapsed">
           <div 
             class="tree-item"
-            :class="{ active: selectedTagId === null && viewMode === 'sessions' }"
+            :class="{ active: selectedTagId === null }"
             @click="handleSelectTag(null)"
           >
             <div class="tree-item-header">
@@ -365,12 +417,16 @@ const handleBackToSessions = () => {
 .sidebar-section:first-child {
   flex: 1;
   margin-bottom: 16px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px; /* Space for scrollbar */
 }
 
 .sidebar-section:last-child {
-  margin-top: auto;
+  margin-top: 0; /* Let it stack naturally, or keep it auto? */
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0; /* Don't shrink tags section */
 }
 
 .sidebar-section-title {
@@ -397,6 +453,55 @@ const handleBackToSessions = () => {
 .sidebar-section-title.collapsible:hover {
   background: var(--bg-primary);
   color: var(--text-primary);
+}
+
+.tag-filter-title {
+  background: var(--primary-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.filter-icon {
+  color: var(--primary);
+}
+
+.clear-filter-btn {
+  background: transparent;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filter-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.tags-section {
+  flex-shrink: 0;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tags-section .template-tree {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .back-btn {
@@ -433,7 +538,7 @@ const handleBackToSessions = () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
+  /* overflow-y: auto; REMOVED */
   padding: 4px;
   margin: -4px;
 }
@@ -470,6 +575,86 @@ const handleBackToSessions = () => {
 .prompt-card.saved:hover {
   border-color: var(--primary-400);
   background: linear-gradient(135deg, var(--bg-surface-hover) 0%, var(--primary-100) 100%);
+}
+
+/* 已保存提示词的特殊样式 - 使用系统主配色 */
+.prompt-card.is-saved-prompt {
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  border-left: none;
+}
+
+.prompt-card.is-saved-prompt:hover {
+  border-color: var(--primary-600);
+  background: var(--bg-surface-hover);
+}
+
+.prompt-card.is-saved-prompt.active {
+  background: var(--primary-light);
+  border-color: var(--primary-600);
+  border-left: none;
+}
+
+.prompt-card-icon.saved-icon {
+  color: var(--primary);
+}
+
+.prompt-card.is-saved-prompt .saved-indicator {
+  color: var(--emerald-600);
+  border-top-color: rgba(16, 185, 129, 0.2);
+}
+
+.prompt-card.is-saved-prompt .sparkle-icon {
+  color: var(--emerald-500);
+}
+
+/* 分区域样式 */
+.saved-prompts-section,
+.normal-sessions-section {
+  margin-bottom: 12px;
+}
+
+.section-subtitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.section-subtitle.collapsible {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.section-subtitle.collapsible:hover {
+  background: var(--bg-primary);
+}
+
+.subtitle-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-subtitle .subtitle-icon {
+  flex-shrink: 0;
+}
+
+.saved-prompts-section .section-subtitle {
+  color: var(--primary);
+}
+
+.saved-list {
+  /* max-height: 200px; REMOVED */
+  /* overflow-y: auto; REMOVED */
 }
 
 .saved-indicator {
@@ -588,8 +773,6 @@ const handleBackToSessions = () => {
 }
 
 .template-tree {
-  max-height: 300px;
-  overflow-y: auto;
   padding-right: 4px;
 }
 

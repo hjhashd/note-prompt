@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onActivated } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import PromptCategorySidebar from '@/components/prompt/PromptCategorySidebar.vue'
 import TiledCategoryFilter from '@/components/prompt/TiledCategoryFilter.vue'
@@ -11,8 +12,22 @@ import {
 
 const appStore = useAppStore()
 const searchQuery = ref('')
-const activeTab = ref('recommended')
+const activeTab = ref('latest')
 const activeSort = ref('newest')
+const contentBodyRef = ref<HTMLElement | null>(null)
+const promptListRef = ref<InstanceType<typeof PromptList> | null>(null)
+const scrollStorageKey = 'scroll:public-folder'
+
+const restoreScroll = () => {
+  const saved = sessionStorage.getItem(scrollStorageKey)
+  if (!contentBodyRef.value || saved === null) return
+  contentBodyRef.value.scrollTop = Number(saved)
+}
+
+const saveScroll = () => {
+  if (!contentBodyRef.value) return
+  sessionStorage.setItem(scrollStorageKey, String(contentBodyRef.value.scrollTop))
+}
 
 // Sidebar selection (Category/Department context)
 const sidebarSelection = ref<number | null>(null)
@@ -41,7 +56,6 @@ watch(activeTab, (newTab) => {
 })
 
 const tabs = [
-  { id: 'recommended', label: '推荐' },
   { id: 'latest', label: '最新' },
   { id: 'popular', label: '最热' }
 ]
@@ -57,6 +71,15 @@ const sortMap: Record<string, string> = {
   'popular': 'views',
   'likes': 'likes'
 }
+
+onMounted(restoreScroll)
+onActivated(() => {
+  restoreScroll()
+  promptListRef.value?.fetchPromptsList(false)
+})
+onBeforeRouteLeave(() => {
+  saveScroll()
+})
 </script>
 
 <template>
@@ -66,7 +89,7 @@ const sortMap: Record<string, string> = {
       <PromptCategorySidebar v-model="sidebarSelection" />
     </div>
 
-    <div class="content-body">
+    <div class="content-body" ref="contentBodyRef">
           <div class="content-container">
             <!-- Page Header -->
             <div class="page-header">
@@ -129,6 +152,8 @@ const sortMap: Record<string, string> = {
               :sort="sortMap[activeSort]"
               filter="plaza"
               :hide-toolbar="true"
+              :show-quote-action="true"
+              ref="promptListRef"
             />
           </div>
         </div>

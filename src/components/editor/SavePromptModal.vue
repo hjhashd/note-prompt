@@ -12,6 +12,7 @@ import {
 } from '@/api/promptSave'
 import type { TagItem } from '@/types/prompt'
 import { useToast } from '@/composables/useToast'
+import { useUserStore } from '@/stores/user'
 
 interface Message {
   id: number | string
@@ -26,6 +27,7 @@ const props = defineProps<{
   messages: Message[]
   promptContent: string
   sessionId: number | null
+  promptId?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -35,7 +37,12 @@ const emit = defineEmits<{
 }>()
 
 const { toast } = useToast()
+const userStore = useUserStore()
 const isSaving = ref(false)
+
+const userDepartmentId = computed(() => {
+  return userStore.userInfo?.department_id || null
+})
 
 // Form State
 const form = ref({
@@ -44,10 +51,11 @@ const form = ref({
   messageId: null as number | string | null,
   visibility: 'private' as 'private' | 'plaza',
   departmentId: null as number | null,
-  finalizeSession: false,
+  finalizeSession: true,
   tagIds: [] as number[],
   description: '',
   userInputExample: '',
+  promptId: null as number | null,
 })
 
 // Department Tree State
@@ -58,39 +66,62 @@ const deptSearchQuery = ref('')
 
 // Tag State
 const allTags = ref<TagItem[]>([])
-const showTagDropdown = ref(false)
 const tagSearchQuery = ref('')
-const newTagName = ref('')
 const isCreatingTag = ref(false)
 // 跟踪本次会话中新创建的标签ID（用于保存时更新department_id）
 const newlyCreatedTagIds = ref<number[]>([])
 
-// Filtered departments based on search query
+// Filtered departments based on search query and user permission
+// 用户只能选择：全部部门(ID=1) 或 所属部门（不显示子部门）
 const filteredDepartments = computed(() => {
-  if (!deptSearchQuery.value.trim()) return departments.value
+  const userDeptId = userDepartmentId.value
+  const ALL_DEPT_ID = 1 // "全部部门"在数据库中的ID
+  const query = deptSearchQuery.value.toLowerCase().trim()
   
-  const query = deptSearchQuery.value.toLowerCase()
-  
-  const filterNodes = (nodes: TagItem[]): TagItem[] => {
-    return nodes.reduce((acc: TagItem[], node) => {
-      const match = node.name.toLowerCase().includes(query)
-      const filteredChildren = node.children ? filterNodes(node.children) : []
-      
-      if (match || filteredChildren.length > 0) {
-        acc.push({
-          ...node,
-          children: filteredChildren
-        })
-        // Auto-expand nodes that have matching children
-        if (filteredChildren.length > 0 && !expandedDepts.value.includes(node.id)) {
-          expandedDepts.value.push(node.id)
-        }
+  // 从完整树中查找指定ID的部门节点（扁平化，不包含children）
+  const findDeptById = (nodes: TagItem[], targetId: number): TagItem | null => {
+    for (const node of nodes) {
+      if (node.id === targetId) {
+        // 返回不包含子节点的副本
+        return { ...node, children: [] }
       }
-      return acc
-    }, [])
+      if (node.children && node.children.length > 0) {
+        const found = findDeptById(node.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
   }
   
-  return filterNodes(departments.value)
+  // 构建可选项列表
+  const buildOptions = (): TagItem[] => {
+    const options: TagItem[] = []
+    
+    // 1. 添加"全部部门"
+    const allDept = findDeptById(departments.value, ALL_DEPT_ID)
+    if (allDept) {
+      options.push(allDept)
+    }
+    
+    // 2. 如果用户有绑定部门，添加所属部门
+    if (userDeptId !== null) {
+      const userDept = findDeptById(departments.value, userDeptId)
+      if (userDept && userDept.id !== ALL_DEPT_ID) {
+        options.push(userDept)
+      }
+    }
+    
+    return options
+  }
+  
+  const options = buildOptions()
+  
+  // 如果有搜索词，进行过滤
+  if (query) {
+    return options.filter(dept => dept.name.toLowerCase().includes(query))
+  }
+  
+  return options
 })
 
 const fetchDepartments = async () => {
@@ -112,16 +143,8 @@ const fetchDepartments = async () => {
     
     const deptItems = mapToTagItem(data)
     
-    // Add "All Departments" option at the top
-    const allDeptNode: TagItem = {
-      id: 0, // Special ID for "All Departments"
-      name: '全部部门',
-      children: [],
-      parentId: null,
-      sortOrder: -1
-    }
-    
-    departments.value = [allDeptNode, ...deptItems]
+    // 使用数据库中已有的"全部部门"(ID=1)，不再创建虚拟节点
+    departments.value = deptItems
   } catch (error) {
     console.error('Failed to fetch departments:', error)
     toast('获取部门列表失败', 'error')
@@ -172,10 +195,6 @@ const filteredTags = computed(() => {
   return allTags.value.filter(tag => tag.name.toLowerCase().includes(query))
 })
 
-const selectedTags = computed(() => {
-  return allTags.value.filter(tag => form.value.tagIds.includes(tag.id as number))
-})
-
 const toggleTag = (tag: TagItem) => {
   const index = form.value.tagIds.indexOf(tag.id as number)
   if (index > -1) {
@@ -185,14 +204,21 @@ const toggleTag = (tag: TagItem) => {
   }
 }
 
+const showCreateButton = computed(() => {
+  const query = tagSearchQuery.value.trim()
+  if (!query) return false
+  return !allTags.value.some(tag => tag.name.toLowerCase() === query.toLowerCase())
+})
+
 const createNewTag = async () => {
-  if (!newTagName.value.trim()) return
+  const tagName = tagSearchQuery.value.trim()
+  if (!tagName) return
 
   isCreatingTag.value = true
   try {
     // 调用Python后端API创建个人标签
     const result = await createPersonalTag({
-      tag_name: newTagName.value.trim(),
+      tag_name: tagName,
       parent_id: 0
     })
 
@@ -208,7 +234,6 @@ const createNewTag = async () => {
     form.value.tagIds.push(newTag.id as number)
     // 记录新创建的标签ID，保存时会更新其department_id
     newlyCreatedTagIds.value.push(result.tag_id)
-    newTagName.value = ''
     tagSearchQuery.value = ''
 
     toast('标签创建成功', 'success')
@@ -220,16 +245,8 @@ const createNewTag = async () => {
   }
 }
 
-const removeTag = (tagId: number) => {
-  const index = form.value.tagIds.indexOf(tagId)
-  if (index > -1) {
-    form.value.tagIds.splice(index, 1)
-  }
-}
-
 const selectedDeptName = computed(() => {
   if (form.value.departmentId === null) return '选择部门...'
-  if (form.value.departmentId === 0) return '全部部门'
   
   const findName = (nodes: TagItem[]): string | null => {
     for (const node of nodes) {
@@ -270,9 +287,6 @@ const handleOutsideClick = (e: MouseEvent) => {
   if (!target.closest('.custom-tree-select')) {
     showDeptDropdown.value = false
   }
-  if (!target.closest('.tag-trigger-wrapper')) {
-    showTagDropdown.value = false
-  }
 }
 
 onMounted(() => {
@@ -288,6 +302,8 @@ onUnmounted(() => {
 watch(() => props.visible, (newVal) => {
   if (newVal) {
     form.value.title = props.initialTitle || '新对话'
+    // 设置 promptId，如果会话已经关联了提示词，则使用它
+    form.value.promptId = props.promptId || null
 
     const aiMessages = props.messages.filter(m => m.role === 'ai' || m.role === 'assistant')
     const initialMsgId = props.initialMessageId
@@ -327,7 +343,7 @@ const handleSave = async () => {
     toast('请选择要保存的消息', 'warning')
     return
   }
-  if (form.value.visibility === 'plaza' && !form.value.departmentId) {
+  if (form.value.visibility === 'plaza' && form.value.departmentId === null) {
     toast('请选择发布部门', 'warning')
     return
   }
@@ -357,8 +373,12 @@ const handleSave = async () => {
     if (form.value.sourceType === 'prompt' && props.promptContent) {
       saveData.content = props.promptContent
     }
-    if (form.value.visibility === 'plaza' && form.value.departmentId) {
+    if (form.value.visibility === 'plaza' && form.value.departmentId !== null) {
       saveData.department_id = form.value.departmentId
+    }
+    // 如果会话已关联提示词，传递 prompt_id 进行更新而不是新建
+    if (form.value.promptId) {
+      saveData.prompt_id = form.value.promptId
     }
 
     // 调用Python后端API保存
@@ -366,7 +386,7 @@ const handleSave = async () => {
 
     // 如果保存的是公开提示词且有新创建的标签，更新标签的department_id
     if (form.value.visibility === 'plaza' &&
-        form.value.departmentId &&
+        form.value.departmentId !== null &&
         newlyCreatedTagIds.value.length > 0) {
       // 找出当前选中的标签中哪些是新创建的
       const selectedNewTagIds = form.value.tagIds.filter(tagId =>
@@ -501,78 +521,46 @@ const selectMessage = (id: number | string) => {
             <div class="form-item">
               <label class="form-label">标签</label>
               <div class="tag-selection-container">
-                <div class="selected-tags-area">
+              <div class="tag-management-panel">
+                <!-- Search / Create Bar -->
+                <div class="tag-search-bar">
+                  <Search :size="14" class="search-icon"/>
+                  <input 
+                    v-model="tagSearchQuery" 
+                    type="text" 
+                    placeholder="搜索或创建新标签..."
+                    @keyup.enter="createNewTag"
+                  >
+                  <button 
+                    v-if="showCreateButton"
+                    class="quick-create-btn"
+                    @click="createNewTag"
+                    :disabled="isCreatingTag"
+                  >
+                    <Plus :size="14" />
+                    创建 "{{ tagSearchQuery }}"
+                  </button>
+                </div>
+                
+                <!-- Available Tags List (Chips) -->
+                <div class="tags-cloud custom-scrollbar">
                   <div 
-                    v-for="tag in selectedTags" 
-                    :key="tag.id" 
-                    class="tag-chip"
+                    v-for="tag in filteredTags" 
+                    :key="tag.id"
+                    class="tag-chip-option"
+                    :class="{ selected: form.tagIds.includes(tag.id as number) }"
+                    @click="toggleTag(tag)"
                   >
                     <span>{{ tag.name }}</span>
-                    <button class="remove-tag" @click="removeTag(tag.id as number)">
-                      <X :size="12" />
-                    </button>
+                    <CheckCircle2 v-if="form.tagIds.includes(tag.id as number)" :size="12" class="tag-check" />
+                    <Plus v-else :size="12" class="tag-plus" />
                   </div>
-                  <div class="tag-trigger-wrapper">
-                    <button 
-                      class="add-tag-trigger" 
-                      @click="showTagDropdown = !showTagDropdown"
-                      :class="{ active: showTagDropdown }"
-                    >
-                      <Plus :size="14" />
-                      <span>添加标签</span>
-                    </button>
-                    
-                    <Transition name="dropdown-fade">
-                      <div v-if="showTagDropdown" class="tag-dropdown" @click.stop>
-                        <div class="tag-search">
-                          <Search :size="14" />
-                          <input 
-                            v-model="tagSearchQuery" 
-                            type="text" 
-                            placeholder="搜索标签..."
-                            @keyup.enter="createNewTag"
-                          >
-                        </div>
-                        <div class="tag-list custom-scrollbar">
-                          <div 
-                            v-for="tag in filteredTags" 
-                            :key="tag.id"
-                            class="tag-item"
-                            :class="{ selected: form.tagIds.includes(tag.id as number) }"
-                            @click="toggleTag(tag)"
-                          >
-                            <Tag :size="14" />
-                            <span>{{ tag.name }}</span>
-                            <CheckCircle2 v-if="form.tagIds.includes(tag.id as number)" :size="14" class="ml-auto" />
-                          </div>
-                          <div v-if="filteredTags.length === 0 && !tagSearchQuery" class="empty-tags">
-                            暂无标签
-                          </div>
-                          <div v-if="tagSearchQuery && !filteredTags.some(t => t.name === tagSearchQuery)" class="create-tag-option" @click="newTagName = tagSearchQuery; createNewTag()">
-                            <Plus :size="14" />
-                            <span>创建新标签: "{{ tagSearchQuery }}"</span>
-                          </div>
-                        </div>
-                        <div class="tag-create-input">
-                          <input 
-                            v-model="newTagName" 
-                            type="text" 
-                            placeholder="新建个人标签..."
-                            @keyup.enter="createNewTag"
-                          >
-                          <button 
-                            class="create-btn" 
-                            @click="createNewTag"
-                            :disabled="!newTagName.trim() || isCreatingTag"
-                          >
-                            <Plus :size="16" />
-                          </button>
-                        </div>
-                      </div>
-                    </Transition>
+                  <div v-if="filteredTags.length === 0 && !showCreateButton" class="no-tags-hint">
+                    暂无标签
                   </div>
                 </div>
               </div>
+            </div>
             </div>
 
             <!-- 5. Visibility -->
@@ -1000,141 +988,128 @@ const selectMessage = (id: number | string) => {
   position: relative;
 }
 
-.add-tag-trigger {
+.tag-selection-container {
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  background: var(--bg-surface);
+}
+
+.tag-management-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tag-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  height: 36px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.tag-search-bar:focus-within {
+  background: var(--bg-surface);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.search-icon {
+  color: var(--text-tertiary);
+}
+
+.tag-search-bar input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  min-width: 0;
+}
+
+.quick-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--primary-light);
+  color: var(--primary);
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.quick-create-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.tags-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.tag-chip-option {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 12px;
+  padding: 6px 12px;
   background: var(--bg-secondary);
-  border: 1px dashed var(--border-light);
+  border: 1px solid var(--border-light);
   border-radius: 100px;
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s;
+  user-select: none;
 }
 
-.add-tag-trigger:hover, .add-tag-trigger.active {
+.tag-chip-option:hover {
+  background: var(--bg-primary);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+.tag-chip-option.selected {
+  background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);
-  background: var(--bg-surface);
 }
 
-.tag-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  width: 240px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: 2100;
-  display: flex;
-  flex-direction: column;
-}
-
-.tag-search {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-tertiary);
-}
-
-.tag-search input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  color: var(--text-primary);
-  outline: none;
-}
-
-.tag-list {
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.tag-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-}
-
-.tag-item:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.tag-item.selected {
-  background: var(--primary-light);
+.tag-check {
   color: var(--primary);
 }
 
-.empty-tags {
-  padding: 20px;
-  text-align: center;
+.tag-plus {
   color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.create-tag-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  color: var(--primary);
-  font-size: 13px;
-  cursor: pointer;
-  border-top: 1px solid var(--border-light);
-  margin-top: 4px;
-}
-
-.tag-create-input {
-  padding: 8px;
-  border-top: 1px solid var(--border-light);
-  display: flex;
-  gap: 8px;
-}
-
-.tag-create-input input {
-  flex: 1;
-  height: 32px;
-  padding: 0 10px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  outline: none;
-}
-
-.create-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.create-btn:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+}
+
+.tag-chip-option:hover .tag-plus {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.no-tags-hint {
+  width: 100%;
+  text-align: center;
+  padding: 12px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .ml-auto {

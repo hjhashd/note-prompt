@@ -85,14 +85,57 @@ export const useChatStore = defineStore('chat', () => {
   const loadSessionHistory = async (sessionId: number) => {
     try {
       const history = await getChatSessionMessages(sessionId, 200)
+
+      const toPromptItem = (payload: any): PromptItem => ({
+        id: Number(payload?.id || 0),
+        title: String(payload?.title || ''),
+        description: payload?.description ? String(payload.description) : undefined,
+        content: payload?.content ? String(payload.content) : '',
+        tags: [],
+        author: { name: '' },
+        stats: { views: 0, likes: 0 },
+        updatedAt: '',
+        createdAt: undefined,
+        isLiked: false,
+        isFavorited: false
+      })
+
+      const parsePromptRef = (raw: string | undefined | null) => {
+        if (!raw) return null
+        const prefix = '__PROMPT_REF__'
+        if (!raw.startsWith(prefix)) return null
+        const body = raw.slice(prefix.length)
+        const newlineIdx = body.indexOf('\n')
+        const jsonPart = (newlineIdx === -1 ? body : body.slice(0, newlineIdx)).trim()
+        const rest = newlineIdx === -1 ? '' : body.slice(newlineIdx).replace(/^\n+/, '')
+        try {
+          const payload = JSON.parse(jsonPart)
+          return { prompt: toPromptItem(payload), rest }
+        } catch {
+          return null
+        }
+      }
+
       const mapped: Message[] = history
         .filter(m => m.role !== 'system')
-        .map((m: ChatMessageItem) => ({
-          id: m.id,
-          role: m.role === 'assistant' ? 'ai' : 'user',
-          content: m.content,
-          type: 'text'
-        }))
+        .map((m: ChatMessageItem) => {
+          const parsed = parsePromptRef(m.content)
+          if (parsed) {
+            return {
+              id: m.id,
+              role: 'ai',
+              content: parsed.rest || parsed.prompt.content || '',
+              type: 'prompt-ref',
+              promptData: parsed.prompt
+            }
+          }
+          return {
+            id: m.id,
+            role: m.role === 'assistant' ? 'ai' : 'user',
+            content: m.content,
+            type: 'text'
+          }
+        })
       
       messages.value = mapped.length > 0 ? mapped : []
       if (messages.value.length === 0) {
@@ -142,6 +185,13 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  const updateSessionPromptId = (sessionId: number, promptId: number) => {
+    const session = sessions.value.find(s => s.session_id === sessionId)
+    if (session) {
+      session.origin_prompt_id = promptId
+    }
+  }
+
   return {
     sessions,
     sessionsLoading,
@@ -159,6 +209,7 @@ export const useChatStore = defineStore('chat', () => {
     createNewSession,
     renameSession,
     removeSession,
-    resetToWelcome
+    resetToWelcome,
+    updateSessionPromptId
   }
 })

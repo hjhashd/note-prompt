@@ -211,6 +211,37 @@ export function getPythonPromptDetail(prompt_id: number): Promise<PromptDetail> 
 }
 
 /**
+ * 获取提示词关联的会话
+ * 用于点击提示词卡片时，找到对应的会话并跳转
+ */
+export function getPromptSession(prompt_id: number): Promise<{
+  code: number
+  message: string
+  data?: {
+    session_id: number
+    title: string
+    status: number
+    create_time?: string
+    update_time?: string
+  }
+}> {
+  return request<any, {
+    code: number
+    message: string
+    data?: {
+      session_id: number
+      title: string
+      status: number
+      create_time?: string
+      update_time?: string
+    }
+  }>({
+    url: `/python/ai/prompts/${prompt_id}/session`,
+    method: 'get'
+  })
+}
+
+/**
  * 删除提示词
  * @param prompt_id 提示词ID
  * @param delete_session 是否同步删除关联的会话记录
@@ -264,11 +295,113 @@ export function updateTagDepartment(tag_id: number, department_id: number): Prom
 }
 
 /**
+ * 为提示词添加标签（拖拽功能）
+ * @param prompt_id 提示词ID
+ * @param tag_id 标签ID
+ */
+export function addTagToPrompt(prompt_id: number, tag_id: number): Promise<{ code: number; message: string; data?: { prompt_id: number; tag_id: number; tag_name: string } }> {
+  return request<any, { code: number; message: string; data?: { prompt_id: number; tag_id: number; tag_name: string } }>({
+    url: `/python/ai/prompts/${prompt_id}/tags`,
+    method: 'post',
+    data: { tag_id }
+  })
+}
+
+/**
+ * 从提示词移除标签
+ * @param prompt_id 提示词ID
+ * @param tag_id 标签ID
+ */
+export function removeTagFromPrompt(prompt_id: number, tag_id: number): Promise<{ code: number; message: string; data?: { prompt_id: number; tag_id: number } }> {
+  return request<any, { code: number; message: string; data?: { prompt_id: number; tag_id: number } }>({
+    url: `/python/ai/prompts/${prompt_id}/tags/${tag_id}`,
+    method: 'delete'
+  })
+}
+
+/**
  * 测试Python后端路由
  */
 export function testPythonPromptRouter(): Promise<{ code: number; message: string }> {
   return request<any, { code: number; message: string }>({
     url: '/python/ai/prompts/test',
     method: 'get'
+  })
+}
+
+// ==================== 个人中心 API ====================
+
+export interface UserStats {
+  total_prompts: number
+  favorite_count: number
+  like_count: number
+  share_count: number
+  view_count: number
+  copy_count: number
+}
+
+export interface ActivityItem {
+  id: number
+  type: string
+  text: string
+  highlight: string
+  time: string
+  icon: string
+}
+
+export interface UserPromptItem {
+  id: number
+  title: string
+  like_count: number
+  favorite_count: number
+  copy_count: number
+  view_count: number
+  create_time: string
+  update_time: string
+  status: number
+  is_template: number
+}
+
+export interface UserPromptsResponse {
+  list: UserPromptItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+/**
+ * 获取用户统计数据
+ */
+export function getUserStats(): Promise<UserStats> {
+  return request<any, UserStats>({
+    url: '/python/ai/prompts/user/stats',
+    method: 'get'
+  })
+}
+
+/**
+ * 获取用户最近活动记录
+ * @param limit 返回条数限制
+ */
+export function getUserActivities(limit = 10): Promise<ActivityItem[]> {
+  return request<any, ActivityItem[]>({
+    url: '/python/ai/prompts/user/activities',
+    method: 'get',
+    params: { limit }
+  })
+}
+
+/**
+ * 获取用户创建的提示词列表
+ * @param page 页码
+ * @param page_size 每页条数
+ * @param status 状态筛选
+ */
+export function getUserPrompts(page = 1, page_size = 10, status?: number): Promise<UserPromptsResponse> {
+  return request<any, UserPromptsResponse>({
+    url: '/python/ai/prompts/user/prompts',
+    method: 'get',
+    params: { page, page_size, status }
   })
 }

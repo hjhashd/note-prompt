@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Copy, Sparkles, MessageSquare } from 'lucide-vue-next'
+import { Copy, Sparkles, MessageSquare, Link } from 'lucide-vue-next'
 import type { PromptItem } from '@/types/prompt'
 import CopyButton from '@/components/common/CopyButton.vue'
 
@@ -25,13 +25,17 @@ const getTagColor = (tag: string) => {
 
 <template>
   <div v-if="compact" class="prompt-ref-compact">
-    <div class="compact-content">
-      {{ prompt.content }}
+      <div class="compact-header">
+        <div class="ref-badge">
+          <Link :size="12" />
+          <span>引用内容</span>
+        </div>
+        <div class="compact-title">{{ prompt.title }}</div>
+      </div>
+      <div class="compact-content">
+        {{ prompt.content }}
+      </div>
     </div>
-    <div class="compact-actions">
-      <CopyButton :text="prompt.content || ''" size="sm" />
-    </div>
-  </div>
   <div v-else class="prompt-ref-card">
     <div class="card-header">
       <div class="title-section">
@@ -82,19 +86,46 @@ const getTagColor = (tag: string) => {
   flex-direction: column;
   gap: 8px;
   max-width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--primary);
+  border-radius: 8px;
+  padding: 12px;
 }
 
-.compact-actions {
+.compact-header {
   display: flex;
-  justify-content: flex-start;
-  margin-top: 8px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ref-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.compact-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .compact-content {
   white-space: pre-wrap;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
-  color: var(--text-primary);
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.02);
+  padding: 8px;
+  border-radius: 6px;
 }
 
 .prompt-ref-card {

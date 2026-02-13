@@ -5,7 +5,6 @@ import {
   PanelLeft,
   Home, 
   FolderOpen, 
-  Heart, 
   User, 
   Shield,
   LogOut
@@ -56,7 +55,6 @@ const activeNav = ref('home')
 const routeMap: Record<string, string> = {
   home: '/',
   'my-prompts': '/my-prompts',
-  favorites: '/favorites',
   profile: '/profile',
   admin: '/admin',
   studio: '/studio' // Map studio route
@@ -92,7 +90,6 @@ watch(
 const navItems = [
   { id: 'home', label: '提示词广场', icon: FolderOpen },
   { id: 'my-prompts', label: '我的提示词', icon: Home },
-  { id: 'favorites', label: '我的收藏', icon: Heart },
   { id: 'profile', label: '个人中心', icon: User },
   { id: 'admin', label: '管理员面板', icon: Shield }
 ]

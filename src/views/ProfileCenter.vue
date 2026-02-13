@@ -1,169 +1,247 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { 
   FileText, 
   Heart, 
   ThumbsUp, 
   Share2, 
-  TrendingUp, 
+  Eye,
+  Copy,
   Activity, 
   Plus, 
   Edit, 
-  Download
+  Trash2,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  Loader2
 } from 'lucide-vue-next'
-import CopyButton from '@/components/common/CopyButton.vue'
+import { 
+  getUserStats, 
+  getUserActivities, 
+  getUserPrompts, 
+  deletePrompt,
+  type UserStats, 
+  type ActivityItem, 
+  type UserPromptItem 
+} from '@/api/promptSave'
+import { useUserStore } from '@/stores/user'
 
-// Mock Data for Stats
-const stats = [
+const router = useRouter()
+const userStore = useUserStore()
+
+const loading = ref({
+  stats: false,
+  activities: false,
+  prompts: false
+})
+
+const userStats = ref<UserStats>({
+  total_prompts: 0,
+  favorite_count: 0,
+  like_count: 0,
+  share_count: 0,
+  view_count: 0,
+  copy_count: 0
+})
+
+const activities = ref<ActivityItem[]>([])
+
+const promptList = ref<UserPromptItem[]>([])
+const pagination = ref({
+  page: 1,
+  page_size: 10,
+  total: 0,
+  total_pages: 0
+})
+
+const statsDisplay = computed(() => [
   { 
     id: 1, 
     label: '总提示词数', 
-    value: 42, 
-    trend: '+12%', 
-    trendUp: true, 
+    value: userStats.value.total_prompts, 
     icon: FileText, 
     colorClass: 'blue' 
   },
   { 
     id: 2, 
-    label: '收藏提示词', 
-    value: 18, 
-    trend: '+8%', 
-    trendUp: true, 
-    icon: Heart, 
-    colorClass: 'teal' 
-  },
-  { 
-    id: 3, 
     label: '获赞总数', 
-    value: 25, 
-    trend: '+15%', 
-    trendUp: true, 
+    value: userStats.value.like_count, 
     icon: ThumbsUp, 
     colorClass: 'orange' 
   },
   { 
+    id: 3, 
+    label: '被收藏数', 
+    value: userStats.value.favorite_count, 
+    icon: Heart, 
+    colorClass: 'teal' 
+  },
+  { 
     id: 4, 
-    label: '分享次数', 
-    value: 12, 
-    trend: '+5%', 
-    trendUp: true, 
-    icon: Share2, 
+    label: '被查看数', 
+    value: userStats.value.view_count, 
+    icon: Eye, 
     colorClass: 'purple' 
+  },
+  { 
+    id: 5, 
+    label: '被复制数', 
+    value: userStats.value.copy_count, 
+    icon: Copy, 
+    colorClass: 'indigo' 
+  },
+  { 
+    id: 6, 
+    label: '分享次数', 
+    value: userStats.value.share_count, 
+    icon: Share2, 
+    colorClass: 'pink' 
   }
-]
+])
 
-// Mock Data for Activities
-const activities = [
-  {
-    id: 1,
-    type: 'create',
-    text: '创建了新的提示词：',
-    highlight: '产品营销文案生成器',
-    time: '2小时前',
-    icon: Plus
-  },
-  {
-    id: 2,
-    type: 'update',
-    text: '更新了提示词：',
-    highlight: 'SEO关键词分析工具',
-    time: '5小时前',
-    icon: Edit
-  },
-  {
-    id: 3,
-    type: 'share',
-    text: '分享了提示词：',
-    highlight: '社交媒体内容规划器',
-    time: '1天前',
-    icon: Share2
+const getActivityIcon = (iconName: string) => {
+  const iconMap: Record<string, any> = {
+    Plus: Plus,
+    Edit: Edit,
+    Share2: Share2,
+    ThumbsUp: ThumbsUp,
+    Heart: Heart,
+    Copy: Copy,
+    Activity: Activity
   }
-]
-
-// Mock Data for Prompt Table
-const promptDetails = [
-  {
-    id: 1,
-    name: '产品营销文案生成器',
-    likes: 8,
-    favorites: 5,
-    uses: 23,
-    createdAt: '2024-01-15 14:30'
-  },
-  {
-    id: 2,
-    name: 'SEO关键词分析工具',
-    likes: 12,
-    favorites: 7,
-    uses: 18,
-    createdAt: '2024-01-14 09:15'
-  },
-  {
-    id: 3,
-    name: '社交媒体内容规划器',
-    likes: 5,
-    favorites: 3,
-    uses: 15,
-    createdAt: '2024-01-13 16:45'
-  },
-  {
-    id: 4,
-    name: '数据分析报告生成器',
-    likes: 10,
-    favorites: 6,
-    uses: 20,
-    createdAt: '2024-01-12 11:20'
-  }
-]
-
-const editPrompt = (id: number) => {
-  // Mock edit
-  console.log('Edit prompt', id)
+  return iconMap[iconName] || Activity
 }
 
+const fetchStats = async () => {
+  loading.value.stats = true
+  try {
+    userStats.value = await getUserStats()
+  } catch (error) {
+    console.error('Failed to fetch user stats:', error)
+  } finally {
+    loading.value.stats = false
+  }
+}
+
+const fetchActivities = async () => {
+  loading.value.activities = true
+  try {
+    activities.value = await getUserActivities(10)
+  } catch (error) {
+    console.error('Failed to fetch activities:', error)
+  } finally {
+    loading.value.activities = false
+  }
+}
+
+const fetchPrompts = async (page = 1) => {
+  loading.value.prompts = true
+  try {
+    const result = await getUserPrompts(page, pagination.value.page_size)
+    promptList.value = result.list
+    pagination.value = {
+      page: result.page,
+      page_size: result.page_size,
+      total: result.total,
+      total_pages: result.total_pages
+    }
+  } catch (error) {
+    console.error('Failed to fetch prompts:', error)
+  } finally {
+    loading.value.prompts = false
+  }
+}
+
+const handleDeletePrompt = async (promptId: number) => {
+  if (!confirm('确定要删除这个提示词吗？此操作不可恢复。')) {
+    return
+  }
+  
+  try {
+    await deletePrompt(promptId, false)
+    await fetchPrompts(pagination.value.page)
+    await fetchStats()
+  } catch (error) {
+    console.error('Failed to delete prompt:', error)
+    alert('删除失败，请重试')
+  }
+}
+
+const editPrompt = (id: number) => {
+  router.push(`/prompt/edit/${id}`)
+}
+
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= pagination.value.total_pages) {
+    fetchPrompts(page)
+  }
+}
+
+const refreshAll = async () => {
+  await Promise.all([
+    fetchStats(),
+    fetchActivities(),
+    fetchPrompts(pagination.value.page)
+  ])
+}
+
+onMounted(() => {
+  refreshAll()
+})
 </script>
 
 <template>
   <div class="profile-view">
-    <!-- Header -->
     <header class="page-header">
       <div class="header-content">
-        <h1 class="page-title">我的个人中心</h1>
-        <p class="page-desc">查看您的使用统计和活动记录</p>
+        <div class="title-row">
+          <h1 class="page-title">我的个人中心</h1>
+          <button class="refresh-btn" @click="refreshAll" :disabled="loading.stats || loading.activities || loading.prompts">
+            <RefreshCw :size="16" :class="{ 'animate-spin': loading.stats }" />
+            刷新
+          </button>
+        </div>
+        <p class="page-desc">
+          欢迎回来，{{ userStore.userInfo?.username || '用户' }}！查看您的使用统计和活动记录
+        </p>
       </div>
     </header>
 
-    <!-- Stats Overview -->
     <section class="stats-overview">
-      <div v-for="stat in stats" :key="stat.id" class="stat-card">
+      <div v-for="stat in statsDisplay" :key="stat.id" class="stat-card">
         <div class="stat-card-header">
           <div class="stat-icon" :class="stat.colorClass">
             <component :is="stat.icon" :size="20" />
           </div>
         </div>
-        <div class="stat-value">{{ stat.value }}</div>
-        <div class="stat-label">{{ stat.label }}</div>
-        <div class="stat-trend" :class="{ positive: stat.trendUp, negative: !stat.trendUp }">
-          <TrendingUp :size="12" />
-          {{ stat.trend }} 本月
+        <div class="stat-value">
+          <Loader2 v-if="loading.stats" :size="24" class="animate-spin" />
+          <span v-else>{{ stat.value }}</span>
         </div>
+        <div class="stat-label">{{ stat.label }}</div>
       </div>
     </section>
 
-    <!-- Activity Section -->
     <section class="activity-section">
       <div class="section-header">
         <h2 class="section-title">
           <Activity :size="18" class="mr-2 inline-block" />
           最近活动
         </h2>
-        <a href="#" class="section-action">查看全部</a>
       </div>
       <div class="activity-list">
-        <div v-for="activity in activities" :key="activity.id" class="activity-item">
+        <div v-if="loading.activities" class="loading-state">
+          <Loader2 :size="24" class="animate-spin" />
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="activities.length === 0" class="empty-state">
+          暂无活动记录
+        </div>
+        <div v-else v-for="activity in activities" :key="activity.id" class="activity-item">
           <div class="activity-icon" :class="activity.type">
-            <component :is="activity.icon" :size="16" />
+            <component :is="getActivityIcon(activity.icon)" :size="16" />
           </div>
           <div class="activity-content">
             <div class="activity-text">
@@ -175,49 +253,85 @@ const editPrompt = (id: number) => {
       </div>
     </section>
 
-    <!-- Prompt Details Table -->
     <section class="prompt-details">
       <div class="section-header">
         <h2 class="section-title">
           <FileText :size="18" class="mr-2 inline-block" />
-          提示词明细表
+          我的提示词
+          <span v-if="!loading.prompts" class="count-badge">{{ pagination.total }}</span>
         </h2>
-        <button class="section-action-btn">
-          <Download :size="14" />
-          导出数据
-        </button>
       </div>
       <div class="table-container">
-        <table>
+        <div v-if="loading.prompts" class="loading-state">
+          <Loader2 :size="24" class="animate-spin" />
+          <span>加载中...</span>
+        </div>
+        <div v-else-if="promptList.length === 0" class="empty-state">
+          <FileText :size="48" class="empty-icon" />
+          <p>暂无提示词</p>
+          <button class="create-btn" @click="router.push('/prompt/create')">
+            <Plus :size="16" />
+            创建第一个提示词
+          </button>
+        </div>
+        <table v-else>
           <thead>
             <tr>
               <th class="text-left">提示词名称</th>
-              <th class="text-center">点赞数</th>
-              <th class="text-center">收藏数</th>
-              <th class="text-center">应用数</th>
+              <th class="text-center">点赞</th>
+              <th class="text-center">收藏</th>
+              <th class="text-center">复制</th>
+              <th class="text-center">查看</th>
               <th class="text-center">创建时间</th>
               <th class="text-center">操作</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in promptDetails" :key="item.id">
-              <td class="font-medium text-gray-800">{{ item.name }}</td>
-              <td class="text-center">{{ item.likes }}</td>
-              <td class="text-center">{{ item.favorites }}</td>
-              <td class="text-center">{{ item.uses }}</td>
-              <td class="text-center text-gray-500 text-sm">{{ item.createdAt }}</td>
+            <tr v-for="item in promptList" :key="item.id">
+              <td class="font-medium text-gray-800">
+                <div class="prompt-title">
+                  {{ item.title }}
+                  <span v-if="item.status === 2" class="template-badge">公开</span>
+                </div>
+              </td>
+              <td class="text-center">{{ item.like_count }}</td>
+              <td class="text-center">{{ item.favorite_count }}</td>
+              <td class="text-center">{{ item.copy_count }}</td>
+              <td class="text-center">{{ item.view_count }}</td>
+              <td class="text-center text-gray-500 text-sm">{{ item.create_time }}</td>
               <td class="text-center">
                 <div class="action-buttons">
                   <button class="action-btn primary" @click="editPrompt(item.id)" title="编辑">
                     <Edit :size="14" />
-                    编辑
                   </button>
-                  <CopyButton :text="item.name" label="复制" />
+                  <button class="action-btn danger" @click="handleDeletePrompt(item.id)" title="删除">
+                    <Trash2 :size="14" />
+                  </button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
+
+        <div v-if="!loading.prompts && promptList.length > 0 && pagination.total_pages > 1" class="pagination">
+          <button 
+            class="page-btn" 
+            :disabled="pagination.page <= 1" 
+            @click="goToPage(pagination.page - 1)"
+          >
+            <ChevronLeft :size="16" />
+          </button>
+          <span class="page-info">
+            {{ pagination.page }} / {{ pagination.total_pages }}
+          </span>
+          <button 
+            class="page-btn" 
+            :disabled="pagination.page >= pagination.total_pages" 
+            @click="goToPage(pagination.page + 1)"
+          >
+            <ChevronRight :size="16" />
+          </button>
+        </div>
       </div>
     </section>
   </div>
@@ -231,28 +345,69 @@ const editPrompt = (id: number) => {
   background-color: var(--bg-primary);
 }
 
-/* Page Header */
 .page-header {
   margin-bottom: 32px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .page-title {
   font-size: 24px;
   font-weight: 700;
   color: var(--gray-900);
-  margin-bottom: 8px;
+  margin: 0;
 }
 
 .page-desc {
   font-size: 14px;
   color: var(--gray-500);
+  margin: 0;
 }
 
-/* Stats Overview */
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--primary-light);
+  border-color: var(--primary-200);
+  color: var(--primary-600);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .stats-overview {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
   margin-bottom: 32px;
 }
 
@@ -260,10 +415,10 @@ const editPrompt = (id: number) => {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
-  padding: 24px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   transition: all var(--transition-normal);
   box-shadow: var(--shadow-sm);
 }
@@ -281,43 +436,37 @@ const editPrompt = (id: number) => {
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Stat Icon Colors */
 .stat-icon.blue { background: var(--primary-light); color: var(--primary-600); }
-.stat-icon.teal { background: #CCFBF1; color: #0D9488; } /* Teal-100, Teal-600 */
-.stat-icon.orange { background: #FEF3C7; color: #D97706; } /* Amber-100, Amber-600 */
-.stat-icon.purple { background: #F3E8FF; color: #9333EA; } /* Purple-100, Purple-600 */
+.stat-icon.teal { background: #CCFBF1; color: #0D9488; }
+.stat-icon.orange { background: #FEF3C7; color: #D97706; }
+.stat-icon.purple { background: #F3E8FF; color: #9333EA; }
+.stat-icon.indigo { background: #E0E7FF; color: #4F46E5; }
+.stat-icon.pink { background: #FCE7F3; color: #DB2777; }
 
 .stat-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--gray-900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--gray-500);
+  text-align: center;
 }
 
-.stat-trend {
-  font-size: 12px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stat-trend.positive { color: var(--success); }
-.stat-trend.negative { color: var(--error); }
-
-/* Activity Section */
 .activity-section {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
@@ -328,7 +477,7 @@ const editPrompt = (id: number) => {
 }
 
 .section-header {
-  padding: 20px 24px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -341,24 +490,22 @@ const editPrompt = (id: number) => {
   color: var(--gray-900);
   display: flex;
   align-items: center;
+  margin: 0;
 }
 
-.section-action, .section-action-btn {
-  font-size: 13px;
-  color: var(--primary-600);
-  text-decoration: none;
-  font-weight: 500;
-  transition: color var(--transition-fast);
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: flex;
+.count-badge {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-
-.section-action:hover, .section-action-btn:hover {
-  color: var(--primary-700);
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 8px;
+  margin-left: 8px;
+  background: var(--primary-light);
+  color: var(--primary-600);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .activity-list {
@@ -388,8 +535,10 @@ const editPrompt = (id: number) => {
 }
 
 .activity-icon.create { background: var(--primary-light); color: var(--primary-600); }
-.activity-icon.update { background: #CCFBF1; color: #0D9488; }
-.activity-icon.share { background: #FEF3C7; color: #D97706; }
+.activity-icon.like { background: #FEF3C7; color: #D97706; }
+.activity-icon.favorite { background: #CCFBF1; color: #0D9488; }
+.activity-icon.share { background: #F3E8FF; color: #9333EA; }
+.activity-icon.copy { background: #E0E7FF; color: #4F46E5; }
 
 .activity-content {
   flex: 1;
@@ -406,7 +555,6 @@ const editPrompt = (id: number) => {
   color: var(--gray-500);
 }
 
-/* Prompt Details Table */
 .prompt-details {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
@@ -419,6 +567,40 @@ const editPrompt = (id: number) => {
 .table-container {
   padding: 0 24px 24px;
   overflow-x: auto;
+}
+
+.loading-state,
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--gray-500);
+  gap: 12px;
+}
+
+.empty-icon {
+  opacity: 0.3;
+}
+
+.create-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  background: var(--primary-600);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.create-btn:hover {
+  background: var(--primary-700);
 }
 
 table {
@@ -457,6 +639,23 @@ tr:last-child td {
 .text-sm { font-size: 13px; }
 .text-center { text-align: center; }
 
+.prompt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.template-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: #CCFBF1;
+  color: #0D9488;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .action-buttons {
   display: flex;
   gap: 8px;
@@ -464,7 +663,7 @@ tr:last-child td {
 }
 
 .action-btn {
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
@@ -473,12 +672,12 @@ tr:last-child td {
   display: flex;
   align-items: center;
   gap: 4px;
+  border: none;
 }
 
 .action-btn.primary {
   background: var(--primary-light);
   color: var(--primary-600);
-  border: 1px solid transparent;
 }
 
 .action-btn.primary:hover {
@@ -486,33 +685,64 @@ tr:last-child td {
   color: white;
 }
 
-.action-btn.secondary {
-  background: transparent;
-  color: var(--gray-500);
+.action-btn.danger {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+.action-btn.danger:hover {
+  background: #DC2626;
+  color: white;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.action-btn.secondary:hover {
-  background: var(--bg-primary);
-  color: var(--gray-900);
-  border-color: var(--gray-500);
+.page-btn:hover:not(:disabled) {
+  background: var(--primary-light);
+  border-color: var(--primary-200);
+  color: var(--primary-600);
 }
 
-/* Responsive */
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  font-size: 14px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
 @media (max-width: 768px) {
-  .main-content {
-    margin-left: 0;
-    width: 100%;
+  .profile-view {
     padding: 20px;
-  }
-  
-  .main-content.collapsed {
-    margin-left: 0;
-    width: 100%;
   }
 
   .stats-overview {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .table-container {
@@ -521,6 +751,11 @@ tr:last-child td {
   
   th, td {
     padding: 12px 8px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    gap: 4px;
   }
 }
 </style>

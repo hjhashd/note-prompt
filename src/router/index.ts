@@ -3,6 +3,13 @@ import PublicFolder from '@/views/PublicFolder.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  },
   routes: [
     {
       path: '/',
@@ -14,12 +21,6 @@ const router = createRouter({
       path: '/my-prompts',
       name: 'my-prompts',
       component: () => import('../views/MyPromptsView.vue'),
-      meta: { requiresAuth: true }
-    },
-    {
-      path: '/favorites',
-      name: 'favorites',
-      component: () => import('../views/FavoritesView.vue'),
       meta: { requiresAuth: true }
     },
     {

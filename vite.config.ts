@@ -1,13 +1,39 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { compression } from 'vite-plugin-compression2'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      ...compression({
+        threshold: 10240,
+        algorithm: 'gzip',
+        deleteOriginalAssets: false,
+        skipIfLargerOrEqual: true,
+      }),
+      apply: 'build'
+    }
+  ],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
+    }
+  },
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vue-vendor': ['vue', 'vue-router', 'pinia', 'vue-virtual-scroller'],
+          'ui-vendor': ['lucide-vue-next'],
+          'markdown-vendor': ['markdown-it', 'github-markdown-css']
+        }
+      }
     }
   },
   server: {
