@@ -363,10 +363,16 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
   transition: all 0.2s;
 }
 
-.pill-btn:hover {
+.pill-btn:hover:not(:disabled) {
   background: var(--bg-primary);
   border-color: var(--border-subtle);
   color: var(--text-primary);
+}
+
+.pill-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-subtle);
 }
 
 .pill-btn.primary {
@@ -375,7 +381,7 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
   border-color: #3b82f6;
 }
 
-.pill-btn.primary:hover {
+.pill-btn.primary:hover:not(:disabled) {
   background: #2563eb;
   border-color: #2563eb;
 }
@@ -455,6 +461,11 @@ const addJsonFormat = () => insertText('\n输出格式：JSON')
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .animate-spin {

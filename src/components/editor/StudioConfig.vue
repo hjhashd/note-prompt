@@ -565,7 +565,6 @@ const runTest = async () => {
       :messages="chatStore.messages"
       :prompt-content="content"
       :session-id="chatStore.currentSessionId"
-      mode="test"
       @save="handleSavePrompt"
       @saved="handlePromptSaved"
     />

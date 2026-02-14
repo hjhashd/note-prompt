@@ -1044,9 +1044,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid rgba(0, 0, 0, 0.03);
-  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
   padding: 0 14px;
   border-radius: 24px;
   cursor: pointer;
@@ -1056,11 +1056,19 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.action-btn-pill:hover {
+.action-btn-pill:hover:not(:disabled) {
   background: var(--bg-primary);
-  color: var(--text-primary);
+  border-color: var(--primary-200);
+  color: var(--primary);
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.action-btn-pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
 }
 
 /* 已保存提示词标记 */
@@ -1091,7 +1099,8 @@ onUnmounted(() => {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   background: transparent; /* Parent card has background */
   position: relative;
 }

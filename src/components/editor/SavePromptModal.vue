@@ -370,35 +370,19 @@ const close = () => {
   emit('update:visible', false)
 }
 
-// 判断是否为独立保存模式（从测试/编辑器直接保存，不经过对话）
+// 统一保存模式 - 任何情况都可以直接保存
 const isStandaloneMode = computed(() => {
-  // 明确指定为 editor 或 test 模式时，允许直接保存
-  if (props.mode === 'editor' || props.mode === 'test') {
-    return true
-  }
-  // dialogue 模式下，必须有 sessionId 才能保存
-  return false
+  return true
 })
 
 const canSave = computed(() => {
-  // 独立模式（测试/编辑器）可以直接保存
-  // 对话模式需要有有效的会话ID
-  if (isStandaloneMode.value) {
-    return true
-  }
-  // 对话模式必须有 sessionId
-  return !!props.sessionId
+  return true
 })
 
 const handleSave = async () => {
   if (isSaving.value) return
   if (!form.value.title.trim()) {
     toast('请输入标题', 'warning')
-    return
-  }
-  // 对话模式下需要检查消息选择
-  if (!isStandaloneMode.value && form.value.sourceType === 'reply' && !form.value.messageId) {
-    toast('请选择要保存的消息', 'warning')
     return
   }
   if (form.value.visibility === 'plaza' && form.value.departmentId === null) {
@@ -408,38 +392,27 @@ const handleSave = async () => {
 
   isSaving.value = true
   try {
-    // 构建保存请求 - 确保所有字段都有值，不使用undefined
+    // 构建保存请求 - 统一使用直接保存模式
     const saveData: any = {
       title: form.value.title.trim(),
-      source_type: isStandaloneMode.value ? 'prompt' : form.value.sourceType,
+      source_type: 'prompt',  // 统一使用 prompt 来源
       visibility: form.value.visibility,
       tag_ids: form.value.tagIds || [],
       description: form.value.description || '',
       user_input_example: form.value.userInputExample || '',
-      finalize_session: false // 独立模式不收敛会话
+      finalize_session: false,  // 不收敛会话
+      content: props.promptContent  // 直接传递提示词内容
     }
 
-    // 独立模式直接传递提示词内容
-    if (isStandaloneMode.value) {
-      saveData.content = props.promptContent
-    } else {
-      // 对话模式需要会话ID
+    // 如果有会话ID，也传递过去（用于关联会话）
+    if (props.sessionId) {
       saveData.session_id = props.sessionId
-      saveData.finalize_session = form.value.finalizeSession
-      
-      // 条件字段
-      if (form.value.sourceType === 'reply' && form.value.messageId) {
-        saveData.message_id = Number(form.value.messageId)
-      }
-      if (form.value.sourceType === 'prompt' && props.promptContent) {
-        saveData.content = props.promptContent
-      }
     }
     
     if (form.value.visibility === 'plaza' && form.value.departmentId !== null) {
       saveData.department_id = form.value.departmentId
     }
-    // 如果会话已关联提示词，传递 prompt_id 进行更新而不是新建
+    // 如果有关联的提示词ID，进行更新而不是新建
     if (form.value.promptId) {
       saveData.prompt_id = form.value.promptId
     }
@@ -517,16 +490,8 @@ const selectMessage = (id: number | string) => {
 
         <!-- Content -->
         <div class="modal-content">
-          <!-- 对话模式下无会话ID时显示警告 -->
-          <div v-if="!isStandaloneMode && !props.sessionId" class="session-warning">
-            <AlertCircle :size="16" class="warning-icon" />
-            <div class="warning-content">
-              <div class="warning-title">无法保存提示词</div>
-              <div class="warning-desc">您刚刚引用了提示词，但尚未进行任何对话或测试。请先与AI进行对话，然后再保存提示词。</div>
-            </div>
-          </div>
-          <!-- 独立模式提示 -->
-          <div v-else-if="isStandaloneMode" class="session-info">
+          <!-- 直接保存模式提示 -->
+          <div class="session-info">
             <Info :size="16" class="info-icon" />
             <div class="info-content">
               <div class="info-title">直接保存模式</div>
@@ -798,8 +763,7 @@ const selectMessage = (id: number | string) => {
           <button 
             class="footer-btn primary" 
             @click="handleSave" 
-            :disabled="isSaving || !canSave"
-            :title="!canSave ? '请先进行对话后再保存' : ''"
+            :disabled="isSaving"
           >
             <span v-if="isSaving" class="loading-spinner"></span>
             <span>{{ isSaving ? '保存中...' : '确认保存' }}</span>

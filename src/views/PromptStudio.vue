@@ -33,7 +33,6 @@ const isLoading = ref(false)
 
 const showSaveModal = ref(false)
 const saveModalMessageId = ref<number | string | null>(null)
-const saveModalMode = ref<'dialogue' | 'editor' | 'test'>('dialogue')
 const referencedPrompt = ref<PromptItem | null>(null)
 
 // Preview History Navigation
@@ -115,53 +114,79 @@ const handleSwitchSession = (sessionId: number) => {
   lockedMessageId.value = null
 }
 
-const handleNewChat = () => {
+const handleNewChat = async () => {
   currentMode.value = 'dialogue'
   lockedMessageId.value = null
+  referencedPrompt.value = null
+  chatStore.clearTempSession()
+  chatStore.openDraftSession()
+  if (route.query.promptId || route.query.session_id) {
+    const query = { ...route.query }
+    delete query.promptId
+    delete query.session_id
+    await router.replace({ query })
+  }
 }
 
 const handleOpenSaveModal = (messageId?: number | string) => {
   saveModalMessageId.value = messageId ?? null
-  // 根据当前模式设置保存模式
-  saveModalMode.value = currentMode.value === 'editor' ? 'editor' : 'dialogue'
   showSaveModal.value = true
 }
 
-const handlePromptSaved = (result: any) => {
-  toast(result?.data?.is_update ? '提示词更新成功' : '提示词保存成功', 'success')
+const handlePromptSaved = async (result: any) => {
+  const isUpdate = result?.is_update || result?.data?.is_update
+  toast(isUpdate ? '提示词更新成功' : '提示词保存成功', 'success')
 
-  if (result?.prompt_id || result?.data?.prompt_id) {
-    const promptId = result?.prompt_id || result?.data?.prompt_id
-    
+  const promptId = result?.prompt_id || result?.data?.prompt_id
+  const sessionId = result?.session_id || result?.data?.session_id
+  const sessionStatus = result?.session_status || result?.data?.session_status
+  
+  if (promptId) {
     if (chatStore.currentSessionId) {
-      // 立即更新当前会话的 origin_prompt_id，确保下次保存时能正确更新而不是新建
       chatStore.updateSessionPromptId(chatStore.currentSessionId, promptId)
     }
     
-    // 编辑器模式下，设置或更新 referencedPrompt 以便下次保存时能正确更新
-    if (saveModalMode.value === 'editor') {
-      if (referencedPrompt.value) {
-        // 更新现有提示词ID
-        referencedPrompt.value = {
-          ...referencedPrompt.value,
-          id: promptId
-        }
-      } else {
-        // 新建提示词后，创建一个基本的 referencedPrompt 对象
-        referencedPrompt.value = {
-          id: promptId,
-          title: promptTitle.value,
-          content: promptContent.value,
-          author: {
-            id: userStore.userInfo?.id,
-            name: userStore.userInfo?.name || userStore.userInfo?.username
-          }
-        } as PromptItem
+    // 统一保存模式：设置或更新 referencedPrompt
+    if (referencedPrompt.value) {
+      referencedPrompt.value = {
+        ...referencedPrompt.value,
+        id: promptId
       }
+    } else {
+      referencedPrompt.value = {
+        id: promptId,
+        title: promptTitle.value,
+        content: promptContent.value,
+        author: {
+          id: userStore.userInfo?.id,
+          name: userStore.userInfo?.name || userStore.userInfo?.username
+        }
+      } as PromptItem
     }
   }
 
-  if (result?.session_status === 1 || result?.data?.session_status === 1) {
+  // 如果有会话ID，实时刷新内容区：切换到该会话并加载历史
+  if (sessionId) {
+    try {
+      // 1. 切换模式到对话（如果当前是编辑器）
+      currentMode.value = 'dialogue'
+      
+      // 2. 切换并加载会话历史
+      await chatStore.switchToSession(sessionId)
+      
+      // 3. 更新 URL，移除 promptId 切换到 session_id 模式
+      const query = { ...route.query, session_id: String(sessionId) }
+      delete query.promptId
+      await router.replace({ query })
+      
+      // 4. 清除临时会话状态
+      chatStore.clearTempSession()
+    } catch (e) {
+      console.error('Failed to switch session after save:', e)
+    }
+  }
+
+  if (sessionStatus === 1) {
     chatStore.loadSessions()
   }
 }
@@ -450,8 +475,7 @@ onMounted(async () => {
       :messages="chatStore.messages"
       :prompt-content="promptContent"
       :session-id="chatStore.currentSessionId"
-      :prompt-id="saveModalMode === 'editor' ? (referencedPrompt?.id || null) : (chatStore.currentSession?.origin_prompt_id || null)"
-      :mode="saveModalMode"
+      :prompt-id="referencedPrompt?.id || chatStore.currentSession?.origin_prompt_id || null"
       @saved="handlePromptSaved"
     />
   </div>
