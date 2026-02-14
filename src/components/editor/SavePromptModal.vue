@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { X, Save, Globe, Lock, ChevronDown, CheckCircle2, MessageSquare, Code, ChevronRight, Search, Tag, Plus, Info } from 'lucide-vue-next'
+import { X, Save, Globe, Lock, ChevronDown, CheckCircle2, MessageSquare, Code, ChevronRight, Search, Tag, Plus, Info, AlertCircle, Loader2 } from 'lucide-vue-next'
 import { getTagsTree, getUserTagsTree } from '@/api/prompt'
 import { 
   getPythonDepartmentsTree, 
@@ -13,6 +13,11 @@ import {
 import type { TagItem } from '@/types/prompt'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
+
+// Module-level cache to persist data across re-opens
+let cachedDepartments: TagItem[] | null = null
+let cachedTags: TagItem[] | null = null
+let isFetchingGlobal = false
 
 interface Message {
   id: number | string
@@ -28,6 +33,7 @@ const props = defineProps<{
   promptContent: string
   sessionId: number | null
   promptId?: number | null
+  mode?: 'dialogue' | 'editor' | 'test'  // 保存模式：dialogue-对话, editor-编辑器, test-测试
 }>()
 
 const emit = defineEmits<{
@@ -41,7 +47,7 @@ const userStore = useUserStore()
 const isSaving = ref(false)
 
 const userDepartmentId = computed(() => {
-  return userStore.userInfo?.department_id || null
+  return userStore.userInfo?.department_id ?? userStore.userInfo?.departmentId ?? null
 })
 
 // Form State
@@ -62,7 +68,6 @@ const form = ref({
 const departments = ref<TagItem[]>([])
 const expandedDepts = ref<number[]>([])
 const showDeptDropdown = ref(false)
-const deptSearchQuery = ref('')
 
 // Tag State
 const allTags = ref<TagItem[]>([])
@@ -76,7 +81,6 @@ const newlyCreatedTagIds = ref<number[]>([])
 const filteredDepartments = computed(() => {
   const userDeptId = userDepartmentId.value
   const ALL_DEPT_ID = 1 // "全部部门"在数据库中的ID
-  const query = deptSearchQuery.value.toLowerCase().trim()
   
   // 从完整树中查找指定ID的部门节点（扁平化，不包含children）
   const findDeptById = (nodes: TagItem[], targetId: number): TagItem | null => {
@@ -115,16 +119,17 @@ const filteredDepartments = computed(() => {
   }
   
   const options = buildOptions()
-  
-  // 如果有搜索词，进行过滤
-  if (query) {
-    return options.filter(dept => dept.name.toLowerCase().includes(query))
-  }
-  
   return options
 })
 
+const isFetchingData = ref(false)
+
 const fetchDepartments = async () => {
+  if (cachedDepartments) {
+    departments.value = cachedDepartments
+    return
+  }
+
   try {
     // 使用Python后端API获取部门树
     const data = await getPythonDepartmentsTree()
@@ -144,6 +149,7 @@ const fetchDepartments = async () => {
     const deptItems = mapToTagItem(data)
     
     // 使用数据库中已有的"全部部门"(ID=1)，不再创建虚拟节点
+    cachedDepartments = deptItems
     departments.value = deptItems
   } catch (error) {
     console.error('Failed to fetch departments:', error)
@@ -152,6 +158,11 @@ const fetchDepartments = async () => {
 }
 
 const fetchTags = async () => {
+  if (cachedTags) {
+    allTags.value = cachedTags
+    return
+  }
+
   try {
     // 使用Python后端API获取标签树，只获取个人标签
     const data = await getPythonTagsTree(true)
@@ -177,16 +188,41 @@ const fetchTags = async () => {
     }
     
     // 只显示个人标签
-    allTags.value = flattenTags(data.personal_tags || [])
+    const tags = flattenTags(data.personal_tags || [])
+    cachedTags = tags
+    allTags.value = tags
   } catch (error) {
     console.error('Failed to fetch tags:', error)
     toast('获取标签列表失败', 'error')
   }
 }
 
-onMounted(() => {
-  fetchDepartments()
-  fetchTags()
+onMounted(async () => {
+  if (isFetchingGlobal) {
+    // Wait briefly if another instance is fetching (unlikely given modal nature but good for safety)
+    const checkInterval = setInterval(() => {
+      if (!isFetchingGlobal) {
+        clearInterval(checkInterval)
+        if (cachedDepartments) departments.value = cachedDepartments
+        if (cachedTags) allTags.value = cachedTags
+      }
+    }, 100)
+    return
+  }
+
+  if (!cachedDepartments || !cachedTags) {
+    isFetchingData.value = true
+    isFetchingGlobal = true
+    try {
+      await Promise.all([fetchDepartments(), fetchTags()])
+    } finally {
+      isFetchingData.value = false
+      isFetchingGlobal = false
+    }
+  } else {
+    departments.value = cachedDepartments
+    allTags.value = cachedTags
+  }
 })
 
 const filteredTags = computed(() => {
@@ -305,7 +341,7 @@ watch(() => props.visible, (newVal) => {
     // 设置 promptId，如果会话已经关联了提示词，则使用它
     form.value.promptId = props.promptId || null
 
-    const aiMessages = props.messages.filter(m => m.role === 'ai' || m.role === 'assistant')
+    const aiMessages = props.messages.filter(m => (m.role === 'ai' || m.role === 'assistant') && m.type !== 'welcome')
     const initialMsgId = props.initialMessageId
     const hasInitial = initialMsgId !== null && initialMsgId !== undefined
     const initialMatch = hasInitial ? aiMessages.find(m => String(m.id) === String(initialMsgId)) : undefined
@@ -327,19 +363,41 @@ watch(() => props.visible, (newVal) => {
 })
 
 const aiMessages = computed(() => 
-  props.messages.filter(m => m.role === 'ai' || m.role === 'assistant')
+  props.messages.filter(m => (m.role === 'ai' || m.role === 'assistant') && m.type !== 'welcome')
 )
 
 const close = () => {
   emit('update:visible', false)
 }
 
+// 判断是否为独立保存模式（从测试/编辑器直接保存，不经过对话）
+const isStandaloneMode = computed(() => {
+  // 明确指定为 editor 或 test 模式时，允许直接保存
+  if (props.mode === 'editor' || props.mode === 'test') {
+    return true
+  }
+  // dialogue 模式下，必须有 sessionId 才能保存
+  return false
+})
+
+const canSave = computed(() => {
+  // 独立模式（测试/编辑器）可以直接保存
+  // 对话模式需要有有效的会话ID
+  if (isStandaloneMode.value) {
+    return true
+  }
+  // 对话模式必须有 sessionId
+  return !!props.sessionId
+})
+
 const handleSave = async () => {
+  if (isSaving.value) return
   if (!form.value.title.trim()) {
     toast('请输入标题', 'warning')
     return
   }
-  if (form.value.sourceType === 'reply' && !form.value.messageId) {
+  // 对话模式下需要检查消息选择
+  if (!isStandaloneMode.value && form.value.sourceType === 'reply' && !form.value.messageId) {
     toast('请选择要保存的消息', 'warning')
     return
   }
@@ -347,32 +405,37 @@ const handleSave = async () => {
     toast('请选择发布部门', 'warning')
     return
   }
-  if (!props.sessionId) {
-    toast('会话ID无效', 'error')
-    return
-  }
 
   isSaving.value = true
   try {
     // 构建保存请求 - 确保所有字段都有值，不使用undefined
     const saveData: any = {
-      session_id: props.sessionId,
       title: form.value.title.trim(),
-      source_type: form.value.sourceType,
+      source_type: isStandaloneMode.value ? 'prompt' : form.value.sourceType,
       visibility: form.value.visibility,
       tag_ids: form.value.tagIds || [],
       description: form.value.description || '',
       user_input_example: form.value.userInputExample || '',
-      finalize_session: form.value.finalizeSession
+      finalize_session: false // 独立模式不收敛会话
     }
 
-    // 条件字段
-    if (form.value.sourceType === 'reply' && form.value.messageId) {
-      saveData.message_id = Number(form.value.messageId)
-    }
-    if (form.value.sourceType === 'prompt' && props.promptContent) {
+    // 独立模式直接传递提示词内容
+    if (isStandaloneMode.value) {
       saveData.content = props.promptContent
+    } else {
+      // 对话模式需要会话ID
+      saveData.session_id = props.sessionId
+      saveData.finalize_session = form.value.finalizeSession
+      
+      // 条件字段
+      if (form.value.sourceType === 'reply' && form.value.messageId) {
+        saveData.message_id = Number(form.value.messageId)
+      }
+      if (form.value.sourceType === 'prompt' && props.promptContent) {
+        saveData.content = props.promptContent
+      }
     }
+    
     if (form.value.visibility === 'plaza' && form.value.departmentId !== null) {
       saveData.department_id = form.value.departmentId
     }
@@ -454,6 +517,22 @@ const selectMessage = (id: number | string) => {
 
         <!-- Content -->
         <div class="modal-content">
+          <!-- 对话模式下无会话ID时显示警告 -->
+          <div v-if="!isStandaloneMode && !props.sessionId" class="session-warning">
+            <AlertCircle :size="16" class="warning-icon" />
+            <div class="warning-content">
+              <div class="warning-title">无法保存提示词</div>
+              <div class="warning-desc">您刚刚引用了提示词，但尚未进行任何对话或测试。请先与AI进行对话，然后再保存提示词。</div>
+            </div>
+          </div>
+          <!-- 独立模式提示 -->
+          <div v-else-if="isStandaloneMode" class="session-info">
+            <Info :size="16" class="info-icon" />
+            <div class="info-content">
+              <div class="info-title">直接保存模式</div>
+              <div class="info-desc">保存后可在提示词库中查看。</div>
+            </div>
+          </div>
           <div class="save-notice">
             <Info :size="14" class="notice-icon" />
             <span>提示：仅保存选中内容为提示词，可在对话列表或库中查看。</span>
@@ -471,8 +550,8 @@ const selectMessage = (id: number | string) => {
               >
             </div>
 
-            <!-- 2. Source Type -->
-            <div class="form-item">
+            <!-- 2. Source Type (仅对话模式显示) -->
+            <div v-if="!isStandaloneMode" class="form-item">
               <label class="form-label">保存来源</label>
               <div class="source-toggle">
                 <button 
@@ -497,7 +576,7 @@ const selectMessage = (id: number | string) => {
 
             <!-- 3. Message Selection (if reply) -->
             <Transition name="fade-height">
-              <div v-if="form.sourceType === 'reply'" class="form-item">
+              <div v-if="!isStandaloneMode && form.sourceType === 'reply'" class="form-item">
                 <label class="form-label required">选择消息内容</label>
                 <div class="message-list">
                   <div 
@@ -544,20 +623,26 @@ const selectMessage = (id: number | string) => {
                 
                 <!-- Available Tags List (Chips) -->
                 <div class="tags-cloud custom-scrollbar">
-                  <div 
-                    v-for="tag in filteredTags" 
-                    :key="tag.id"
-                    class="tag-chip-option"
-                    :class="{ selected: form.tagIds.includes(tag.id as number) }"
-                    @click="toggleTag(tag)"
-                  >
-                    <span>{{ tag.name }}</span>
-                    <CheckCircle2 v-if="form.tagIds.includes(tag.id as number)" :size="12" class="tag-check" />
-                    <Plus v-else :size="12" class="tag-plus" />
+                  <div v-if="isFetchingData && allTags.length === 0" class="loading-tags">
+                    <Loader2 :size="16" class="animate-spin" />
+                    <span>加载标签中...</span>
                   </div>
-                  <div v-if="filteredTags.length === 0 && !showCreateButton" class="no-tags-hint">
-                    暂无标签
-                  </div>
+                  <template v-else>
+                    <div 
+                      v-for="tag in filteredTags" 
+                      :key="tag.id"
+                      class="tag-chip-option"
+                      :class="{ selected: form.tagIds.includes(tag.id as number) }"
+                      @click="toggleTag(tag)"
+                    >
+                      <span>{{ tag.name }}</span>
+                      <CheckCircle2 v-if="form.tagIds.includes(tag.id as number)" :size="12" class="tag-check" />
+                      <Plus v-else :size="12" class="tag-plus" />
+                    </div>
+                    <div v-if="filteredTags.length === 0 && !showCreateButton" class="no-tags-hint">
+                      暂无标签
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
@@ -608,16 +693,12 @@ const selectMessage = (id: number | string) => {
                   
                   <Transition name="dropdown-fade">
                     <div v-if="showDeptDropdown" class="tree-dropdown">
-                      <div class="dropdown-search">
-                        <Search :size="14" />
-                        <input 
-                          v-model="deptSearchQuery" 
-                          type="text" 
-                          placeholder="搜索部门..."
-                          @click.stop
-                        >
-                      </div>
                       <div class="tree-content custom-scrollbar">
+                        <div v-if="isFetchingData && departments.length === 0" class="loading-tree">
+                          <Loader2 :size="16" class="animate-spin" />
+                          <span>加载部门中...</span>
+                        </div>
+                        <template v-else>
                         <template v-for="dept in filteredDepartments" :key="dept.id">
                           <!-- Recursive tree rendering -->
                           <div class="dept-node">
@@ -701,6 +782,7 @@ const selectMessage = (id: number | string) => {
                         <div v-if="filteredDepartments.length === 0" class="empty-tree">
                           {{ departments.length === 0 ? '加载中...' : '未找到匹配部门' }}
                         </div>
+                        </template>
                       </div>
                     </div>
                   </Transition>
@@ -713,7 +795,12 @@ const selectMessage = (id: number | string) => {
         <!-- Footer -->
         <div class="modal-footer">
           <button class="footer-btn secondary" @click="close" :disabled="isSaving">取消</button>
-          <button class="footer-btn primary" @click="handleSave" :disabled="isSaving">
+          <button 
+            class="footer-btn primary" 
+            @click="handleSave" 
+            :disabled="isSaving || !canSave"
+            :title="!canSave ? '请先进行对话后再保存' : ''"
+          >
             <span v-if="isSaving" class="loading-spinner"></span>
             <span>{{ isSaving ? '保存中...' : '确认保存' }}</span>
           </button>
@@ -744,6 +831,7 @@ const selectMessage = (id: number | string) => {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-light);
+  will-change: transform, opacity;
 }
 
 .modal-header {
@@ -814,6 +902,78 @@ const selectMessage = (id: number | string) => {
 .notice-icon {
   color: var(--primary);
   flex-shrink: 0;
+}
+
+/* 无会话ID警告样式 */
+.session-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+
+.warning-icon {
+  color: #d97706;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warning-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.warning-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.warning-desc {
+    font-size: 13px;
+    color: #a16207;
+    line-height: 1.5;
+}
+
+/* 独立模式信息提示样式 */
+.session-info {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #3b82f6;
+    border-radius: var(--radius-sm);
+    margin-bottom: 16px;
+}
+
+.info-icon {
+    color: #2563eb;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.info-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.info-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e40af;
+    margin-bottom: 4px;
+}
+
+.info-desc {
+    font-size: 13px;
+    color: #3b82f6;
+    line-height: 1.5;
 }
 
 .form-item {
@@ -1520,5 +1680,31 @@ const selectMessage = (id: number | string) => {
   opacity: 0;
   max-height: 0;
   margin-bottom: 0;
+}
+
+.dropdown-fade-enter-active,
+.dropdown-fade-leave-active {
+  transition: all 0.2s ease;
+}
+
+.dropdown-fade-enter-from,
+.dropdown-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+
+.loading-tags,
+.loading-tree {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 </style>

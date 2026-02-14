@@ -5,7 +5,6 @@ import MarkdownIt from 'markdown-it'
 import ThinkBlock from './ThinkBlock.vue'
 import SavePromptModal from './SavePromptModal.vue'
 import { copyToClipboard } from '@/utils/clipboard'
-import { Share2, Save } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import { useToast } from '@/composables/useToast'
 
@@ -15,8 +14,12 @@ const props = defineProps<{
 
 const chatStore = useChatStore()
 const { toast } = useToast()
-const model = ref('GPT-4 Turbo')
+// 使用后端实际配置的模型
+const model = ref('DeepSeek-32B')
 const temperature = ref(0.6)
+
+// 测试输入内容
+const testInput = ref('')
 
 const isVariableListCollapsed = ref(false)
 const thinkContent = ref('')
@@ -64,13 +67,6 @@ const thinkBlockRef = ref<InstanceType<typeof ThinkBlock> | null>(null)
 const processQueue = () => {
   if (tokenQueue.length === 0) {
     isProcessingQueue = false
-    
-    // Check if we should collapse thinking block
-    if (!isTesting.value && thinkContent.value) {
-      setTimeout(() => {
-        thinkBlockRef.value?.collapse()
-      }, 200)
-    }
     return
   }
 
@@ -79,19 +75,27 @@ const processQueue = () => {
   
   if (now - lastRenderTime >= RENDER_INTERVAL) {
     // Process tokens
-    // If buffer is too large (>500 chars), process more tokens to catch up
     const bufferSize = tokenQueue.reduce((acc, item) => acc + item.text.length, 0)
-    const chunkSize = bufferSize > 500 ? 50 : 2 // Dynamic chunk size
+    const chunkSize = bufferSize > 500 ? 50 : (bufferSize > 100 ? 10 : 2)
     
     let processedCount = 0
+    let startedRealContent = false
+    
     while (tokenQueue.length > 0 && processedCount < chunkSize) {
       const item = tokenQueue.shift()!
       if (item.type === 'thinking') {
         thinkContent.value += item.text
       } else {
+        if (realContent.value === '') {
+          startedRealContent = true
+        }
         realContent.value += item.text
       }
       processedCount++
+    }
+
+    if (startedRealContent && thinkContent.value) {
+      thinkBlockRef.value?.collapse()
     }
     
     lastRenderTime = now
@@ -101,11 +105,13 @@ const processQueue = () => {
   requestAnimationFrame(processQueue)
 }
 
+// 移除原有的 watch isTesting 自动收起逻辑，改为在正文输出时即刻收起
+// 或者保留作为兜底，但缩短时间
 watch(isTesting, (newVal) => {
-  if (!newVal && thinkContent.value) {
+  if (!newVal && thinkContent.value && realContent.value === '') {
     setTimeout(() => {
       thinkBlockRef.value?.collapse()
-    }, 500)
+    }, 200)
   }
 })
 
@@ -232,23 +238,31 @@ const runTest = async () => {
     toast('请先填写提示词内容', 'warning')
     return
   }
-  
+
+  // 使用用户输入的测试内容，如果没有输入则不发送用户消息（避免上下文污染）
+  const userInput = testInput.value.trim()
+
   emit('run-test', preview)
-  
+
   // Start real test
   isTesting.value = true
-  
+
   thinkContent.value = ''
   realContent.value = ''
   let fullResponse = ''
-  
+
   shouldAutoScroll.value = true // Reset auto-scroll
-  
+
+  // 构建请求参数，如果没有用户输入则不包含 user_input
+  const requestData: any = {
+    system_prompt: preview
+  }
+  if (userInput) {
+    requestData.user_input = userInput
+  }
+
   await testStream(
-    {
-      system_prompt: preview,
-      user_input: '你好'
-    },
+    requestData,
     (chunk) => {
       // Logic to separate think/content and push to queue
       // Note: This is a simplified stream parser. 
@@ -346,13 +360,12 @@ const runTest = async () => {
     <div class="tools-header">
       <div class="header-title">配置与预览</div>
       <div class="header-actions">
-        <button class="tool-action-btn" title="分享">
-           <Share2 :size="16" />
-           <span>分享</span>
-        </button>
-        <button class="tool-action-btn primary" title="保存" @click="handleOpenSaveModal">
-           <Save :size="16" />
-           <span>保存</span>
+        <button class="run-btn-sm" type="button" @click="runTest" :disabled="isTesting">
+            <svg v-if="!isTesting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span v-if="isTesting">运行中...</span>
+            <span v-else>运行</span>
         </button>
       </div>
       <button class="tools-close" @click="emit('close')">
@@ -370,12 +383,10 @@ const runTest = async () => {
           <div class="config-group">
             <div class="group-header">模型配置</div>
             <div class="control-row">
-                <select v-model="model" class="ide-input model-select">
-                    <option>GPT-4 Turbo</option>
-                    <option>GPT-3.5 Turbo</option>
-                    <option>Claude 3 Opus</option>
-                    <option>Gemini Pro</option>
+                <select v-model="model" class="ide-input model-select" disabled title="当前使用后端配置的 DeepSeek-32B 模型">
+                    <option>DeepSeek-32B</option>
                 </select>
+                <span class="model-hint">使用后端配置模型</span>
             </div>
             <div class="control-row flex-center">
                 <label class="param-label">Temp: {{ temperature }}</label>
@@ -423,12 +434,6 @@ const runTest = async () => {
           <div class="config-group">
             <div class="group-header">
               <span>快速测试</span>
-              <button class="run-btn-sm" type="button" @click.stop="runTest" :disabled="isTesting">
-                <svg v-if="!isTesting" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                </svg>
-                {{ isTesting ? '运行中...' : '运行' }}
-              </button>
             </div>
 
             <div class="preview-section">
@@ -450,7 +455,19 @@ const runTest = async () => {
                </div>
             </div>
 
-            <!-- Removed Test Input Section -->
+            <!-- 测试输入区域 -->
+            <div class="test-input-section">
+              <div class="section-header">
+                <span class="section-title">测试输入</span>
+                <span class="section-hint">额外输入，测试提示词效果（可选）</span>
+              </div>
+              <textarea
+                v-model="testInput"
+                class="test-input-textarea"
+                placeholder="输入测试内容，例如：你好，请帮我分析这个问题..."
+                rows="3"
+              ></textarea>
+            </div>
           </div>
       </div>
 
@@ -477,7 +494,25 @@ const runTest = async () => {
             <ThinkBlock ref="thinkBlockRef" :content="thinkContent" class="mb-4" />
             
             <div class="markdown-body output-content" v-html="md.render(realContent)"></div>
-            
+
+            <!-- 测试完成后的保存按钮 -->
+            <div v-if="realContent && !isTesting" class="test-complete-actions">
+              <div class="test-complete-hint">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                <span>测试完成，效果满意？</span>
+              </div>
+              <button class="save-after-test-btn" @click="handleOpenSaveModal">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
+                保存此提示词
+              </button>
+            </div>
+
             <!-- Exquisite Loading State -->
             <div v-if="isTesting && !realContent && !thinkContent" class="loading-container">
                 <div class="ai-loader">
@@ -499,8 +534,11 @@ const runTest = async () => {
                 </svg>
             </div>
             <div class="empty-text">暂无测试结果</div>
-            <button class="run-btn-lg" type="button" @click="runTest" :disabled="isTesting">
-                立即运行
+            <button class="run-btn-simple" type="button" @click="runTest" :disabled="isTesting">
+                <svg v-if="!isTesting" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <span>{{ isTesting ? '正在生成结果...' : '立即运行测试' }}</span>
             </button>
         </div>
       </div>
@@ -527,6 +565,7 @@ const runTest = async () => {
       :messages="chatStore.messages"
       :prompt-content="content"
       :session-id="chatStore.currentSessionId"
+      mode="test"
       @save="handleSavePrompt"
       @saved="handlePromptSaved"
     />
@@ -565,38 +604,59 @@ const runTest = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-right: 12px;
-  margin-left: auto; /* Push to right before close button */
+  margin-left: auto;
+  margin-right: 8px;
 }
 
-.tool-action-btn {
+.run-btn-sm {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid #e5e7eb;
-  background: white;
-  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.tool-action-btn:hover {
-  background: #f9fafb;
-  border-color: #3b82f6; /* blue-500 */
+.run-btn-sm:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.run-btn-sm:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.run-btn-simple {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
   color: #3b82f6;
+  border: 1px solid #3b82f6;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 16px;
 }
 
-.tool-action-btn.primary {
-  background: #3b82f6;
-  color: white;
-  border-color: #3b82f6;
+.run-btn-simple:hover:not(:disabled) {
+  background: #eff6ff;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.1);
 }
 
-.tool-action-btn.primary:hover {
-  background: #2563eb; /* blue-600 */
+.run-btn-simple:disabled {
+  border-color: #93c5fd;
+  color: #93c5fd;
+  cursor: not-allowed;
 }
 
 .tools-close {
@@ -696,7 +756,15 @@ const runTest = async () => {
 }
 
 .model-select {
-    cursor: pointer;
+    cursor: not-allowed;
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.model-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    margin-left: 8px;
 }
 
 .param-label {
@@ -828,6 +896,91 @@ const runTest = async () => {
     font-weight: 600;
     color: #6b7280;
     text-transform: uppercase;
+}
+
+.section-hint {
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: normal;
+}
+
+/* Test Input Section */
+.test-input-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.test-input-textarea {
+    width: 100%;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 13px;
+    padding: 10px 12px;
+    color: #1f2937;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+
+.test-input-textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.test-input-textarea::placeholder {
+    color: #9ca3af;
+}
+
+/* 测试完成后保存按钮样式 */
+.test-complete-actions {
+    margin-top: 24px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.test-complete-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #166534;
+    font-weight: 500;
+}
+
+.save-after-test-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #10b981;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.save-after-test-btn:hover {
+    background: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+}
+
+.save-after-test-btn:active {
+    transform: translateY(0);
 }
 
 .copy-btn-xs {
@@ -985,30 +1138,11 @@ const runTest = async () => {
     font-size: 14px;
 }
 
-.run-btn-lg {
-    background: #2563eb;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
-}
+.mr-2 {
+     margin-right: 8px;
+ }
 
-.run-btn-lg:hover {
-    background: #1d4ed8;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
-}
-
-.run-btn-lg:active {
-    transform: translateY(0);
-}
-
-:deep(.markdown-body) {
+ :deep(.markdown-body) {
     font-size: 14px;
     background-color: transparent;
 }

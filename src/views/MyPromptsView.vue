@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, provide, onMounted, onActivated, nextTick } from 'vue'
+import { ref, provide, onMounted, onActivated, nextTick, onBeforeUnmount } from 'vue'
 import { useRouter, onBeforeRouteLeave } from 'vue-router'
-import { Plus, Trash2, X, AlertTriangle, Share2, Settings, Tag, FolderOpen } from 'lucide-vue-next'
+import { Plus, Trash2, X, AlertTriangle, Share2, Settings, Tag, FolderOpen, Search, ArrowUpDown } from 'lucide-vue-next'
 import { useAppStore } from '@/stores/app'
 import { useChatStore } from '@/stores/chat'
 import { useToast } from '@/composables/useToast'
@@ -17,17 +17,39 @@ const appStore = useAppStore()
 const chatStore = useChatStore()
 const userStore = useUserStore()
 const { toast } = useToast()
-const currentTagId = ref<number | null>(null)
+const currentTagId = ref<number | number[] | null>(null)
+const searchQuery = ref('')
+const activeFilter = ref('all')
+const activeSort = ref('updatedAt')
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
+const filters = [
+  { id: 'all', label: '全部' },
+  { id: 'my', label: '私有提示词' },
+  { id: 'favorites', label: '我的收藏' },
+  { id: 'shared', label: '公共分享' }
+]
+
+const sortOptions = [
+  { value: 'updatedAt', label: '最近更新' },
+  { value: 'createdAt', label: '创建时间' },
+  { value: 'views', label: '最多浏览' },
+  { value: 'likes', label: '最多收藏' }
+]
 
 // 标签管理弹窗状态
 const showTagManageModal = ref(false)
 const contentBodyRef = ref<HTMLElement | null>(null)
 const scrollStorageKey = 'scroll:my-prompts'
 
-const restoreScroll = () => {
+const restoreScroll = async () => {
   const saved = sessionStorage.getItem(scrollStorageKey)
   if (!contentBodyRef.value || saved === null) return
-  contentBodyRef.value.scrollTop = Number(saved)
+  await nextTick()
+  const el = contentBodyRef.value
+  const target = Number(saved)
+  const max = Math.max(0, el.scrollHeight - el.clientHeight)
+  el.scrollTop = Math.min(target, max)
 }
 
 const saveScroll = () => {
@@ -361,8 +383,26 @@ provide('isBatchTagMode', isBatchTagMode)
 provide('selectedPrompts', selectedPrompts)
 provide('togglePromptSelection', togglePromptSelection)
 
-onMounted(restoreScroll)
-onActivated(restoreScroll)
+const onGlobalKeydown = (e: KeyboardEvent) => {
+  const key = e.key.toLowerCase()
+  const isK = key === 'k'
+  const modifierPressed = e.ctrlKey || e.metaKey
+  if (!modifierPressed || !isK) return
+
+  e.preventDefault()
+  searchInputRef.value?.focus()
+}
+
+onMounted(() => {
+  restoreScroll()
+  window.addEventListener('keydown', onGlobalKeydown)
+})
+onActivated(() => {
+  restoreScroll()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown)
+})
 onBeforeRouteLeave(() => {
   saveScroll()
 })
@@ -373,14 +413,12 @@ onBeforeRouteLeave(() => {
     <!-- Main Content Area -->
     <div class="content-body" ref="contentBodyRef">
       <div class="content-container">
-        <!-- Page Header -->
         <div class="page-header">
           <div class="header-content">
             <h1 class="page-title">我的提示词</h1>
             <p class="page-desc">管理和组织你的个人提示词库，快速访问和复用</p>
           </div>
           <div class="header-actions">
-            <!-- 批量分享按钮 -->
             <button 
               v-if="!isShareMode && !isDeleteMode"
               class="btn-secondary" 
@@ -402,7 +440,6 @@ onBeforeRouteLeave(() => {
               </button>
             </template>
 
-            <!-- 标签管理按钮 -->
             <button
               v-if="!isDeleteMode && !isShareMode && !isBatchTagMode"
               class="btn-secondary"
@@ -412,7 +449,6 @@ onBeforeRouteLeave(() => {
               <span>标签管理</span>
             </button>
 
-            <!-- 批量标签按钮 -->
             <button
               v-if="!isDeleteMode && !isShareMode && !isBatchTagMode"
               class="btn-secondary"
@@ -422,7 +458,6 @@ onBeforeRouteLeave(() => {
               <span>批量管理标签</span>
             </button>
 
-            <!-- 删除模式按钮 -->
             <button
               v-if="!isDeleteMode && !isShareMode && !isBatchTagMode"
               class="btn-secondary"
@@ -432,7 +467,6 @@ onBeforeRouteLeave(() => {
               <span>批量删除</span>
             </button>
 
-            <!-- 批量标签模式操作栏 -->
             <template v-if="isBatchTagMode">
               <span class="selected-count">已选择 {{ selectedPrompts.size }} 个</span>
               <button class="btn-primary" @click="openBatchTagModal" :disabled="selectedPrompts.size === 0">
@@ -464,26 +498,74 @@ onBeforeRouteLeave(() => {
           </div>
         </div>
 
-            <!-- Tiled Category Filter -->
-            <div class="mb-6">
-              <TiledCategoryFilter v-model="currentTagId" type="user" :enable-drag="true" />
-            </div>
+        <div class="sticky-header">
+          <div class="tools-section">
+            <TiledCategoryFilter v-model="currentTagId" type="user" :enable-drag="true" />
+          </div>
 
-            <!-- Prompt List -->
-            <div class="list-container">
-              <PromptList 
-                :is-sidebar-collapsed="appStore.isSidebarCollapsed" 
-                :tag-id="currentTagId"
-                filter="my"
-                ref="promptListRef"
-              />
+          <!-- Toolbar -->
+          <div class="toolbar">
+            <div class="search-section">
+              <div class="search-input-wrapper">
+                <Search class="search-icon" :size="20" />
+                <input 
+                  type="text" 
+                  v-model="searchQuery" 
+                  placeholder="在列表中搜索..."
+                  class="main-search-input"
+                  ref="searchInputRef"
+                >
+                <div class="search-shortcut" aria-hidden="true">
+                  <kbd>Ctrl</kbd>
+                  <span class="kbd-plus">+</span>
+                  <kbd>K</kbd>
+                </div>
+              </div>
+            </div>
+            
+            <div class="filter-section">
+              <div class="filter-tabs">
+                <button 
+                  v-for="filter in filters" 
+                  :key="filter.id"
+                  class="filter-tab"
+                  :class="{ active: activeFilter === filter.id }"
+                  @click="activeFilter = filter.id"
+                >
+                  {{ filter.label }}
+                </button>
+              </div>
+              
+              <div class="sort-selector">
+                <span class="sort-label">排序:</span>
+                <div class="select-wrapper">
+                  <select v-model="activeSort" class="sort-select">
+                    <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                  <ArrowUpDown class="select-icon" :size="14" />
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-    <!-- 删除确认弹窗 -->
-    <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDelete">
+        <!-- Prompt List -->
+        <div class="list-container">
+          <PromptList 
+            :is-sidebar-collapsed="appStore.isSidebarCollapsed" 
+            :tag-id="currentTagId"
+            :filter="activeFilter"
+            :search="searchQuery"
+            :sort="activeSort"
+            :hide-toolbar="true"
+            ref="promptListRef"
+          /></div>
+          </div>
+        </div>
+
+    <!-- 删除确认弹窗 -->   <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDelete">
       <div class="modal-content">
         <div class="modal-header">
           <AlertTriangle class="warning-icon" :size="24" />
@@ -610,6 +692,7 @@ onBeforeRouteLeave(() => {
         </div>
       </div>
     </div>
+  </div>
 </template>
 
 <style scoped>
@@ -622,7 +705,7 @@ onBeforeRouteLeave(() => {
 .content-body {
     flex: 1;
     overflow-y: auto;
-    padding: var(--layout-gap);
+    padding: 0 var(--layout-gap) var(--layout-gap) var(--layout-gap);
     min-width: 0; /* Prevent flex overflow */
 }
 
@@ -631,14 +714,181 @@ onBeforeRouteLeave(() => {
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
+}
+
+.sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg-primary);
+    padding-top: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* Toolbar */
+.toolbar {
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-surface);
+  border: 1px solid rgba(0,0,0,0.02);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-section {
+  width: 100%;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.main-search-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 48px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  font-size: 16px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  transition: all 0.2s;
+}
+
+.main-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.search-shortcut {
+  position: absolute;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.search-shortcut kbd {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  min-width: 20px;
+  text-align: center;
+}
+
+.filter-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+}
+
+.filter-tab {
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.filter-tab:hover {
+  color: var(--text-primary);
+}
+
+.filter-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.sort-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sort-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sort-select {
+  appearance: none;
+  padding: 6px 32px 6px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-select:hover {
+  border-color: var(--text-secondary);
+}
+
+.sort-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.select-icon {
+  position: absolute;
+  right: 8px;
+  color: var(--text-tertiary);
+  pointer-events: none;
 }
 
 .page-header {
+    padding-top: var(--layout-gap);
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
+    align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
@@ -651,7 +901,7 @@ onBeforeRouteLeave(() => {
     font-size: 24px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .page-desc {
@@ -661,9 +911,13 @@ onBeforeRouteLeave(() => {
 
 .header-actions {
     display: flex;
-    gap: 12px;
+    gap: 8px;
     flex-shrink: 0;
     align-items: center;
+}
+
+.tools-section {
+    margin-top: 6px;
 }
 
 .btn-primary {

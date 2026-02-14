@@ -19,3 +19,22 @@ export function login(data: any): Promise<LoginResponse> {
     data
   }) as any
 }
+
+export interface RegisterData {
+  username: string
+  password: string
+}
+
+export interface RegisterResponse {
+  success: boolean
+  message: string
+  user?: UserInfo
+}
+
+export function register(data: RegisterData): Promise<RegisterResponse> {
+  return request({
+    url: '/python/auth/register',
+    method: 'post',
+    data
+  }) as any
+}

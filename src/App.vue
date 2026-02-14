@@ -50,9 +50,11 @@ onMounted(() => {
       }"
     >
       <router-view v-slot="{ Component }">
-        <keep-alive include="PublicFolder,MyPromptsView">
-          <component :is="Component" />
-        </keep-alive>
+        <Transition name="page-fade" mode="out-in">
+          <keep-alive include="PublicFolder,MyPromptsView">
+            <component :is="Component" />
+          </keep-alive>
+        </Transition>
       </router-view>
     </main>
   </div>
@@ -82,5 +84,22 @@ onMounted(() => {
 
 .main-content.full-width {
   margin-left: 0;
+}
+
+/* Page Transition: Smooth Fade + Slide */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity var(--transition-normal), transform var(--transition-normal);
+  will-change: opacity, transform;
+}
+
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>

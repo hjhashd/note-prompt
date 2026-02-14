@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useChatStore } from '@/stores/chat'
 import { storeToRefs } from 'pinia'
-import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, FolderOpen, Tag, Layers, Sparkles, BookmarkCheck } from 'lucide-vue-next'
+import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, ChevronLeft, MoreHorizontal, FolderOpen, Tag, Layers, Sparkles, BookmarkCheck, Clock, Link } from 'lucide-vue-next'
 import { ref, onMounted, computed } from 'vue'
 import { getUserTagsTree } from '@/api/prompt'
 import { getPrompts } from '@/api/prompt'
@@ -11,8 +11,8 @@ import DeleteConfirmModal from '@/components/common/DeleteConfirmModal.vue'
 import RenameModal from '@/components/common/RenameModal.vue'
 
 const chatStore = useChatStore()
-const { sessions, currentSessionId } = storeToRefs(chatStore)
-const isTagsCollapsed = ref(false)
+const { sessions, currentSessionId, tempSession } = storeToRefs(chatStore)
+const isTagsCollapsed = ref(true)
 const isSavedCollapsed = ref(false)
 const isHistoryCollapsed = ref(false)
 const userTags = ref<TagItem[]>([])
@@ -34,10 +34,17 @@ const showRenameModal = ref(false)
 const selectedSession = ref<ChatSessionItem | null>(null)
 const actionLoading = ref(false)
 
+const props = defineProps<{
+  canGoBack?: boolean
+  canGoForward?: boolean
+}>()
+
 const emit = defineEmits<{
   (e: 'switch-session', id: number): void
   (e: 'new-chat'): void
   (e: 'select-prompt', prompt: PromptItem): void
+  (e: 'preview-back'): void
+  (e: 'preview-forward'): void
 }>()
 
 onMounted(async () => {
@@ -52,14 +59,16 @@ onMounted(async () => {
 const handleNewChat = () => {
   selectedTagId.value = null
   promptResults.value = []
+  chatStore.clearTempSession()
   chatStore.createNewSession()
   emit('new-chat')
 }
 
-const handleSwitchSession = (id: number) => {
+const handleSwitchSession = async (id: number) => {
   selectedTagId.value = null
   promptResults.value = []
-  chatStore.switchToSession(id)
+  chatStore.clearTempSession()
+  await chatStore.switchToSession(id)
   emit('switch-session', id)
 }
 
@@ -192,6 +201,55 @@ const handleSelectPrompt = (prompt: PromptItem) => {
         
         <!-- 正常对话列表区域 -->
         <template v-else>
+          <!-- 临时会话区域 -->
+          <div v-if="tempSession && !currentSessionId" class="temp-session-section">
+            <div class="section-subtitle">
+              <div class="subtitle-content">
+                <Clock :size="13" class="subtitle-icon" />
+                <span>临时会话</span>
+              </div>
+              <div class="nav-controls">
+                <button 
+                  class="nav-btn" 
+                  :class="{ disabled: !canGoBack }" 
+                  :disabled="!canGoBack" 
+                  @click.stop="emit('preview-back')" 
+                  title="返回上一个"
+                >
+                  <ChevronLeft :size="12" />
+                </button>
+                <button 
+                  class="nav-btn" 
+                  :class="{ disabled: !canGoForward }" 
+                  :disabled="!canGoForward" 
+                  @click.stop="emit('preview-forward')" 
+                  title="前进"
+                >
+                  <ChevronRight :size="12" />
+                </button>
+              </div>
+            </div>
+            <div class="prompt-list">
+              <div
+                class="prompt-card temp-session-card"
+                :class="{ 'is-own': tempSession.isOwnPrompt, 'is-ref': !tempSession.isOwnPrompt }"
+              >
+                <div class="prompt-card-header">
+                  <div class="prompt-card-title">
+                    <component 
+                      :is="tempSession.isOwnPrompt ? Sparkles : Link" 
+                      :size="15" 
+                      class="prompt-card-icon"
+                      :class="{ 'ref-icon': !tempSession.isOwnPrompt }"
+                    />
+                    <span class="text-truncate">{{ tempSession.title }}</span>
+                  </div>
+                  <div v-if="!tempSession.isOwnPrompt" class="temp-tag">引用</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <!-- 已保存的提示词区域 -->
           <div v-if="savedPromptSessions.length > 0" class="saved-prompts-section">
             <div 
@@ -199,11 +257,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
               @click="isSavedCollapsed = !isSavedCollapsed"
             >
               <div class="subtitle-content">
-                <BookmarkCheck :size="14" class="subtitle-icon" />
+                <BookmarkCheck :size="13" class="subtitle-icon" />
                 <span>已保存的提示词</span>
               </div>
               <ChevronRight 
-                :size="14" 
+                :size="13" 
                 class="collapse-icon"
                 :class="{ rotated: !isSavedCollapsed }"
               />
@@ -218,7 +276,7 @@ const handleSelectPrompt = (prompt: PromptItem) => {
               >
                 <div class="prompt-card-header">
                   <div class="prompt-card-title">
-                    <Sparkles :size="16" class="prompt-card-icon saved-icon" />
+                    <Sparkles :size="15" class="prompt-card-icon saved-icon" />
                     <span class="text-truncate">{{ session.title || '新对话' }}</span>
                   </div>
                   <div class="card-actions">
@@ -241,11 +299,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
               @click="isHistoryCollapsed = !isHistoryCollapsed"
             >
               <div class="subtitle-content">
-                <MessageSquare :size="14" class="subtitle-icon" />
+                <MessageSquare :size="13" class="subtitle-icon" />
                 <span>对话记录</span>
               </div>
               <ChevronRight 
-                :size="14" 
+                :size="13" 
                 class="collapse-icon"
                 :class="{ rotated: !isHistoryCollapsed }"
               />
@@ -260,7 +318,7 @@ const handleSelectPrompt = (prompt: PromptItem) => {
               >
                 <div class="prompt-card-header">
                   <div class="prompt-card-title">
-                    <MessageSquare :size="16" class="prompt-card-icon" />
+                    <MessageSquare :size="15" class="prompt-card-icon" />
                     <span class="text-truncate">{{ session.title || '新对话' }}</span>
                   </div>
                   <div class="card-actions">
@@ -537,81 +595,98 @@ const handleSelectPrompt = (prompt: PromptItem) => {
 .prompt-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  /* overflow-y: auto; REMOVED */
-  padding: 4px;
-  margin: -4px;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
 }
 
 .prompt-card {
-  padding: 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease-in-out;
   position: relative;
   overflow: hidden;
+  color: var(--text-secondary);
 }
 
 .prompt-card:hover {
-  border-color: var(--primary-600);
   background: var(--bg-surface-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
 }
 
 .prompt-card.active {
   background: var(--primary-light);
-  border-color: var(--primary-600);
+  color: var(--primary-700);
+  font-weight: 500;
 }
 
-.prompt-card.saved {
-  background: linear-gradient(135deg, var(--bg-surface) 0%, var(--primary-50) 100%);
-  border-color: var(--primary-200);
-}
-
-.prompt-card.saved:hover {
-  border-color: var(--primary-400);
-  background: linear-gradient(135deg, var(--bg-surface-hover) 0%, var(--primary-100) 100%);
-}
-
-/* 已保存提示词的特殊样式 - 使用系统主配色 */
+/* 已保存提示词的特殊样式 */
 .prompt-card.is-saved-prompt {
-  background: var(--bg-surface);
-  border-color: var(--border-subtle);
-  border-left: none;
+  background: rgba(var(--primary-rgb), 0.02);
+  border: 1px solid rgba(var(--primary-rgb), 0.1);
 }
 
 .prompt-card.is-saved-prompt:hover {
-  border-color: var(--primary-600);
-  background: var(--bg-surface-hover);
+  background: rgba(var(--primary-rgb), 0.05);
+  border-color: rgba(var(--primary-rgb), 0.2);
 }
 
 .prompt-card.is-saved-prompt.active {
   background: var(--primary-light);
-  border-color: var(--primary-600);
-  border-left: none;
+  border-color: transparent;
+  color: var(--primary-700);
 }
 
 .prompt-card-icon.saved-icon {
   color: var(--primary);
 }
 
-.prompt-card.is-saved-prompt .saved-indicator {
-  color: var(--emerald-600);
-  border-top-color: rgba(16, 185, 129, 0.2);
-}
-
-.prompt-card.is-saved-prompt .sparkle-icon {
-  color: var(--emerald-500);
-}
-
 /* 分区域样式 */
 .saved-prompts-section,
-.normal-sessions-section {
-  margin-bottom: 12px;
+.normal-sessions-section,
+.temp-session-section {
+  margin-bottom: 16px;
+}
+
+/* 临时会话样式 - 紧凑且清晰 */
+.temp-session-section .section-subtitle {
+  color: var(--orange-600);
+}
+
+.temp-session-card {
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.08) 0%, transparent 100%);
+  border: 1px solid rgba(251, 146, 60, 0.2);
+  color: var(--orange-700);
+}
+
+.temp-session-card:hover {
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.15) 0%, transparent 100%);
+  border-color: rgba(251, 146, 60, 0.3);
+}
+
+.temp-session-card.is-own {
+  /* 自定义提示词的临时状态样式 */
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.08) 0%, transparent 100%);
+  border-color: rgba(var(--primary-rgb), 0.2);
+  color: var(--primary-700);
+}
+
+.temp-session-card .ref-icon {
+  color: var(--orange-500);
+}
+
+.temp-tag {
+  font-size: 10px;
+  color: var(--orange-600);
+  background: rgba(251, 146, 60, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid rgba(251, 146, 60, 0.2);
 }
 
 .section-subtitle {
@@ -621,11 +696,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--gray-500);
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 8px;
-  padding: 4px 8px;
+  margin-bottom: 6px;
+  padding: 4px 6px;
   border-radius: 4px;
 }
 
@@ -667,6 +742,38 @@ const handleSelectPrompt = (prompt: PromptItem) => {
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px dashed var(--primary-100);
+}
+
+.nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nav-btn:hover:not(.disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+
+.nav-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .sparkle-icon {

@@ -269,7 +269,7 @@ onMounted(() => {
         <div v-else-if="promptList.length === 0" class="empty-state">
           <FileText :size="48" class="empty-icon" />
           <p>暂无提示词</p>
-          <button class="create-btn" @click="router.push('/prompt/create')">
+          <button class="create-btn" @click="router.push('/studio')">
             <Plus :size="16" />
             创建第一个提示词
           </button>

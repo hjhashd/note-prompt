@@ -1,13 +1,12 @@
 <template>
-  <div class="login-container min-h-screen flex items-center justify-center p-4">
-    <!-- Background elements for visual interest -->
+  <div class="register-container min-h-screen flex items-center justify-center p-4">
     <div class="bg-decoration">
       <div class="circle circle-1"></div>
       <div class="circle circle-2"></div>
       <div class="circle circle-3"></div>
     </div>
 
-    <div class="login-card max-w-md w-full space-y-8 p-10 rounded-3xl shadow-2xl backdrop-blur-xl border border-white/20">
+    <div class="register-card max-w-md w-full space-y-8 p-10 rounded-3xl shadow-2xl backdrop-blur-xl border border-white/20">
       <div class="text-center">
         <div class="logo-wrapper mb-6">
           <div class="logo-icon">
@@ -22,10 +21,10 @@
         <h2 class="text-4xl font-black tracking-tight text-gray-900 mb-2">
           提示词平台
         </h2>
-        <p class="text-gray-500 font-medium">欢迎回来，请登录您的账户</p>
+        <p class="text-gray-500 font-medium">创建新账户，开始您的旅程</p>
       </div>
 
-      <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
+      <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
         <div class="space-y-4">
           <div class="input-group">
             <label for="username" class="block text-sm font-semibold text-gray-700 mb-1 ml-1">用户名</label>
@@ -40,11 +39,14 @@
                 name="username"
                 type="text"
                 required
-                v-model="loginForm.username"
+                v-model="registerForm.username"
                 class="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 sm:text-sm"
-                placeholder="请输入用户名"
+                placeholder="请输入用户名 (3-50字符)"
+                minlength="3"
+                maxlength="50"
               />
             </div>
+            <p class="text-xs text-gray-400 mt-1 ml-1">仅支持字母、数字、下划线和连字符</p>
           </div>
 
           <div class="input-group">
@@ -60,21 +62,33 @@
                 name="password"
                 type="password"
                 required
-                v-model="loginForm.password"
+                v-model="registerForm.password"
                 class="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 sm:text-sm"
-                placeholder="请输入密码"
+                placeholder="请输入密码 (至少6位)"
+                minlength="6"
               />
             </div>
           </div>
-        </div>
 
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            <input id="remember-me" name="remember-me" type="checkbox" v-model="rememberMe" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-            <label for="remember-me" class="ml-2 block text-sm text-gray-600"> 记住我 </label>
-          </div>
-          <div class="text-sm">
-            <a href="#" class="font-medium text-blue-600 hover:text-blue-500 transition-colors"> 忘记密码？ </a>
+          <div class="input-group">
+            <label for="confirmPassword" class="block text-sm font-semibold text-gray-700 mb-1 ml-1">确认密码</label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </span>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                required
+                v-model="registerForm.confirmPassword"
+                class="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 sm:text-sm"
+                placeholder="请再次输入密码"
+                minlength="6"
+              />
+            </div>
           </div>
         </div>
 
@@ -89,26 +103,30 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              登录中...
+              注册中...
             </span>
-            <span v-else>立即登录</span>
+            <span v-else>立即注册</span>
           </button>
         </div>
         
         <div v-if="errorMsg" class="error-msg p-3 rounded-lg bg-red-50 text-red-500 text-sm text-center border border-red-100 animate-shake">
           {{ errorMsg }}
         </div>
+
+        <div v-if="successMsg" class="success-msg p-3 rounded-lg bg-green-50 text-green-600 text-sm text-center border border-green-100">
+          {{ successMsg }}
+        </div>
       </form>
 
       <div class="text-center text-sm text-gray-500 pt-4">
-        还没有账号？ <router-link to="/register" class="font-bold text-blue-600 hover:text-blue-500">立即注册</router-link>
+        已有账号？ <router-link to="/login" class="font-bold text-blue-600 hover:text-blue-500">立即登录</router-link>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.login-container {
+.register-container {
   background-color: #f0f4f9;
   background-image: 
     radial-gradient(at 0% 0%, rgba(26, 115, 232, 0.05) 0, transparent 50%),
@@ -169,7 +187,7 @@
   100% { transform: translate(0, 0) scale(1); }
 }
 
-.login-card {
+.register-card {
   background: rgba(255, 255, 255, 0.8);
   position: relative;
   z-index: 1;
@@ -196,53 +214,54 @@
 </style>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useUserStore } from '@/stores/user'
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { register } from '@/api/auth'
 
 const router = useRouter()
-const route = useRoute()
-const userStore = useUserStore()
 
-const REMEMBERED_USERNAME_KEY = 'remembered_username'
-
-onMounted(() => {
-  if (userStore.isAuthenticated) {
-    router.push('/')
-    return
-  }
-  const savedUsername = localStorage.getItem(REMEMBERED_USERNAME_KEY)
-  if (savedUsername) {
-    loginForm.username = savedUsername
-    rememberMe.value = true
-  }
-})
-
-const loginForm = reactive({
+const registerForm = reactive({
   username: '',
-  password: ''
+  password: '',
+  confirmPassword: ''
 })
 
 const loading = ref(false)
 const errorMsg = ref('')
-const rememberMe = ref(false)
+const successMsg = ref('')
 
-const handleLogin = async () => {
-  loading.value = true
+const handleRegister = async () => {
   errorMsg.value = ''
+  successMsg.value = ''
+
+  if (registerForm.password !== registerForm.confirmPassword) {
+    errorMsg.value = '两次输入的密码不一致'
+    return
+  }
+
+  const usernamePattern = /^[a-zA-Z0-9_-]+$/
+  if (!usernamePattern.test(registerForm.username)) {
+    errorMsg.value = '用户名只能包含字母、数字、下划线和连字符'
+    return
+  }
+
+  loading.value = true
   try {
-    await userStore.login(loginForm)
+    const data = await register({
+      username: registerForm.username,
+      password: registerForm.password
+    })
     
-    if (rememberMe.value) {
-      localStorage.setItem(REMEMBERED_USERNAME_KEY, loginForm.username)
+    if (data.success) {
+      successMsg.value = '注册成功！即将跳转到登录页面...'
+      setTimeout(() => {
+        router.push('/login')
+      }, 1500)
     } else {
-      localStorage.removeItem(REMEMBERED_USERNAME_KEY)
+      errorMsg.value = data.message || '注册失败，请稍后重试'
     }
-    
-    const redirectPath = route.query.redirect as string || '/'
-    router.push(redirectPath)
   } catch (error: any) {
-    errorMsg.value = error.message || '登录失败，请检查用户名和密码'
+    errorMsg.value = error.message || '注册失败，请稍后重试'
   } finally {
     loading.value = false
   }

@@ -32,7 +32,7 @@ const saveScroll = () => {
 // Sidebar selection (Category/Department context)
 const sidebarSelection = ref<number | null>(null)
 // Tiled filter selection (Sub-category refinement)
-const filterSelection = ref<number | null>(null)
+const filterSelection = ref<number | number[] | null>(null)
 
 // Reset filter when sidebar category changes
 watch(sidebarSelection, () => {
@@ -75,7 +75,6 @@ const sortMap: Record<string, string> = {
 onMounted(restoreScroll)
 onActivated(() => {
   restoreScroll()
-  promptListRef.value?.fetchPromptsList(false)
 })
 onBeforeRouteLeave(() => {
   saveScroll()
@@ -99,46 +98,48 @@ onBeforeRouteLeave(() => {
               </div>
             </div>
 
-            <!-- Tiled Category Filter (Sub-tags of selected department) -->
-            <TiledCategoryFilter 
-              v-model="filterSelection" 
-              :parent-id="sidebarSelection"
-            />
+            <div class="sticky-header">
+              <!-- Tiled Category Filter (Sub-tags of selected department) -->
+              <TiledCategoryFilter 
+                v-model="filterSelection" 
+                :parent-id="sidebarSelection"
+              />
 
-            <!-- Filter & Search Bar -->
-            <div class="filter-section">
-              <div class="search-wrapper">
-                <Search class="search-icon" />
-                <input 
-                  v-model="searchQuery" 
-                  type="text" 
-                  placeholder="搜索公共提示词..." 
-                  class="search-input"
-                >
-              </div>
-              
-              <div class="filter-controls">
-                <div class="tabs">
-                  <button 
-                    v-for="tab in tabs" 
-                    :key="tab.id"
-                    class="tab-btn"
-                    :class="{ active: activeTab === tab.id }"
-                    @click="activeTab = tab.id"
+              <!-- Filter & Search Bar -->
+              <div class="filter-section">
+                <div class="search-wrapper">
+                  <Search class="search-icon" />
+                  <input 
+                    v-model="searchQuery" 
+                    type="text" 
+                    placeholder="搜索公共提示词..." 
+                    class="search-input"
                   >
-                    {{ tab.label }}
-                  </button>
                 </div>
                 
-                <div class="divider"></div>
-                
-                <div class="sort-wrapper">
-                  <span class="sort-label">排序:</span>
-                  <select v-model="activeSort" class="sort-select">
-                    <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
-                      {{ opt.label }}
-                    </option>
-                  </select>
+                <div class="filter-controls">
+                  <div class="tabs">
+                    <button 
+                      v-for="tab in tabs" 
+                      :key="tab.id"
+                      class="tab-btn"
+                      :class="{ active: activeTab === tab.id }"
+                      @click="activeTab = tab.id"
+                    >
+                      {{ tab.label }}
+                    </button>
+                  </div>
+                  
+                  <div class="divider"></div>
+                  
+                  <div class="sort-wrapper">
+                    <span class="sort-label">排序:</span>
+                    <select v-model="activeSort" class="sort-select">
+                      <option v-for="opt in sortOptions" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -179,7 +180,8 @@ onBeforeRouteLeave(() => {
 .content-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--layout-gap);
+  /* Remove top padding to allow sticky header to reach the top edge without gaps */
+  padding: 0 var(--layout-gap) var(--layout-gap) var(--layout-gap);
   min-width: 0;
 }
 
@@ -192,7 +194,25 @@ onBeforeRouteLeave(() => {
 }
 
 /* Page Header */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: var(--bg-primary, #fff);
+  /* Extend background to cover horizontal gaps if any, but with container padding 0, this might not be needed for top gap */
+  /* However, we need to handle horizontal padding of content-body if we want full width sticky */
+  /* Since content-body has horizontal padding, sticky header is inside content-container */
+  /* We want sticky header background to extend? No, it's inside container. */
+  padding-top: 16px;
+  padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .page-header {
+  /* Add top padding to compensate for removed content-body padding */
+  padding-top: var(--layout-gap);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch, inject, computed, nextTick, onActivated } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, inject, computed, nextTick, onActivated, onDeactivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, ArrowUpDown, Box, Heart, Eye, User, ThumbsUp, Maximize2, CheckSquare, Square, Link, Settings, MoreVertical, X, Share2, Trash2, Tag, Plus } from 'lucide-vue-next'
 import * as LucideIcons from 'lucide-vue-next'
@@ -10,12 +10,13 @@ import { getPrompts, toggleFavorite, toggleLike, getPromptDetail, batchShareProm
 import { deletePrompt, addTagToPrompt, getPromptSession, removeTagFromPrompt, getPythonTagsTree } from '@/api/promptSave'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
+import { useChatStore } from '@/stores/chat'
 import type { PromptItem } from '@/types/prompt'
 import type { TagNode } from '@/api/promptSave'
 
 const props = defineProps<{
   isSidebarCollapsed?: boolean
-  tagId?: number | null
+  tagId?: number | number[] | null
   deptId?: number | null
   filter?: string
   sort?: string
@@ -33,18 +34,22 @@ const emit = defineEmits<{
 const router = useRouter()
 const { toast } = useToast()
 const userStore = useUserStore()
+const chatStore = useChatStore()
 const searchQuery = ref('')
 const activeFilter = ref(props.filter || 'all')
 const sortBy = ref('updatedAt')
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const prompts = ref<PromptItem[]>([])
 const loading = ref(false)
+const fetchId = ref(0)
+const lastQueryKey = ref<string | null>(null)
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(12)
 const showDetailModal = ref(false)
 const selectedPromptId = ref<number | null>(null)
 const selectedPromptData = ref<PromptItem | null>(null)
+const navigatingId = ref<number | null>(null)
 
 // 注入模式状态
 const isDeleteMode = inject<Ref<boolean>>('isDeleteMode', ref(false))
@@ -61,6 +66,8 @@ const showTagManageModal = ref(false)
 const tagManagePrompt = ref<PromptItem | null>(null)
 const userTags = ref<TagNode[]>([])
 const loadingTags = ref(false)
+// 用于防止重复添加标签的 Set，存储正在添加的标签ID
+const addingTagIds = ref<Set<number>>(new Set())
 
 // 删除确认弹窗
 const showDeleteConfirmModal = ref(false)
@@ -243,18 +250,25 @@ const handleAddTagToPrompt = async (tagId: number) => {
     return
   }
 
+  // 防重复：检查是否正在添加该标签
+  if (addingTagIds.value.has(tagId)) {
+    console.log('[PromptList] Tag is already being added:', tagId)
+    return
+  }
+
+  // 添加到处理中集合，防止重复
+  addingTagIds.value.add(tagId)
+
   try {
     await addTagToPrompt(tagManagePrompt.value.id, tagId)
-    // 乐观更新
+    // 乐观更新（tagManagePrompt 和 prompts 中的对象是同一个引用，只需添加一次）
     tagManagePrompt.value.tags.push(tag.tag_name)
-    // 更新主列表中的数据
-    const promptInList = prompts.value.find(p => p.id === tagManagePrompt.value!.id)
-    if (promptInList) {
-      promptInList.tags.push(tag.tag_name)
-    }
     toast(`已添加标签「${tag.tag_name}」`, 'success')
   } catch (error: any) {
     toast(error?.response?.data?.message || '添加标签失败', 'error')
+  } finally {
+    // 无论成功失败，都从处理中集合移除
+    addingTagIds.value.delete(tagId)
   }
 }
 
@@ -398,11 +412,25 @@ const setActiveFilter = (filter: string) => {
   activeFilter.value = filter
 }
 
+const getQueryKey = () => {
+  return JSON.stringify({
+    keyword: props.search !== undefined ? props.search : searchQuery.value,
+    filter: activeFilter.value,
+    sort: props.sort || sortBy.value,
+    tagId: props.tagId,
+    deptId: props.deptId ?? null
+  })
+}
+
 const fetchPromptsList = async (append = false) => {
-  if (loading.value) return
+  // 如果是加载更多，且正在加载，则忽略
+  if (append && loading.value) return
+
+  const currentFetchId = ++fetchId.value
   loading.value = true
   
   try {
+    const queryKey = getQueryKey()
     const res = await getPrompts({
       page: currentPage.value,
       pageSize: pageSize.value,
@@ -414,16 +442,32 @@ const fetchPromptsList = async (append = false) => {
       deptId: props.deptId
     })
     
+    // 检查是否是最新请求
+    if (currentFetchId !== fetchId.value) return
+
+    if (!append && res.list.length === 0 && res.total > 0 && currentPage.value > 1) {
+      currentPage.value = 1
+      await fetchPromptsList(false)
+      return
+    }
+
     if (append) {
       prompts.value = [...prompts.value, ...res.list]
     } else {
       prompts.value = res.list
     }
     total.value = res.total
+    if (!append) {
+      lastQueryKey.value = queryKey
+    }
   } catch (error) {
-    console.error('Failed to fetch prompts:', error)
+    if (currentFetchId === fetchId.value) {
+      console.error('Failed to fetch prompts:', error)
+    }
   } finally {
-    loading.value = false
+    if (currentFetchId === fetchId.value) {
+      loading.value = false
+    }
   }
 }
 
@@ -447,7 +491,6 @@ watch([activeFilter, sortBy], ([newFilter, newSort], [oldFilter, oldSort]) => {
   if (sortChanged && props.sort) return
 
   currentPage.value = 1
-  prompts.value = [] 
   fetchPromptsList(false)
 })
 
@@ -459,21 +502,22 @@ watch(() => props.filter, (newFilter) => {
 
 watch(() => [props.tagId, props.deptId, props.sort, props.search], () => {
   currentPage.value = 1
-  prompts.value = []
   fetchPromptsList(false)
-})
+}, { immediate: true })
 
 let searchTimeout: ReturnType<typeof setTimeout>
 watch(searchQuery, () => {
   clearTimeout(searchTimeout)
   searchTimeout = setTimeout(() => {
     currentPage.value = 1
-    prompts.value = []
     fetchPromptsList(false)
   }, 300)
 })
 
 const setupObserver = () => {
+  if (observer) {
+    observer.disconnect()
+  }
   observer = new IntersectionObserver((entries) => {
     const entry = entries[0]
     if (entry && entry.isIntersecting && !loading.value && prompts.value.length < total.value) {
@@ -535,32 +579,52 @@ const handleCardClick = async (prompt: PromptItem) => {
     return
   }
 
-  // 如果是当前用户的提示词，尝试获取关联的会话
-  if (isOwnPrompt(prompt)) {
-    try {
-      const res = await getPromptSession(prompt.id)
-      if (res.code === 0 && res.data?.session_id) {
-        // 有关联的会话，跳转到该会话
-        router.push({
-          path: '/studio',
-          query: {
-            session_id: res.data.session_id
-          }
-        })
-        return
-      }
-    } catch (error) {
-      console.error('Failed to get prompt session:', error)
-    }
-  }
+  // 防止重复点击
+  if (navigatingId.value) return
+  navigatingId.value = prompt.id
 
-  // 没有关联的会话或者是他人的提示词，按原有逻辑跳转
-  router.push({
-    path: '/studio',
-    query: {
-      promptId: prompt.id
+  try {
+    // 如果是当前用户的提示词，尝试获取关联的会话
+    if (isOwnPrompt(prompt)) {
+      try {
+        const res = await getPromptSession(prompt.id)
+        if (res && res.code === 0 && res.data?.session_id) {
+          // 清理之前的会话状态，避免残留
+          chatStore.openDraftSession()
+          
+          // 有关联的会话，跳转到该会话
+          await router.push({
+            path: '/studio',
+            query: {
+              session_id: res.data.session_id
+            }
+          })
+          return
+        }
+      } catch (error) {
+        console.error('Failed to get prompt session:', error)
+      }
     }
-  })
+
+    // 没有关联的会话或者是他人的提示词，按原有逻辑跳转
+    // 清理之前的会话状态，避免残留
+    chatStore.openDraftSession()
+
+    // 使用 state 传递预加载数据，优化体验
+    await router.push({
+      path: '/studio',
+      query: {
+        promptId: prompt.id
+      },
+      state: {
+        initialContent: prompt.content,
+        initialTitle: prompt.title,
+        initialPrompt: JSON.parse(JSON.stringify(prompt)) // 传递完整对象以备用
+      }
+    })
+  } finally {
+    navigatingId.value = null
+  }
 }
 
 const openDetailModal = (prompt: PromptItem) => {
@@ -610,11 +674,13 @@ const handlePromptUpdate = (updatedPrompt: PromptItem) => {
 
 // 拖拽相关状态
 const dragOverPromptId = ref<number | null>(null)
+// 用于防止重复添加标签的 Set，存储 "promptId:tagId" 格式的字符串
+const addingTags = ref<Set<string>>(new Set())
 
 // 处理拖拽进入卡片
 const handleDragEnter = (e: DragEvent, prompt: PromptItem) => {
-  // 只有"我的提示词"页面才允许拖拽添加标签
-  if (props.filter !== 'my') return
+  // 只有自己的提示词才允许拖拽添加标签
+  if (!isOwnPrompt(prompt)) return
   e.preventDefault()
   console.log('[PromptList] Drag enter:', prompt.id, prompt.title)
   dragOverPromptId.value = prompt.id
@@ -622,8 +688,6 @@ const handleDragEnter = (e: DragEvent, prompt: PromptItem) => {
 
 // 处理拖拽在卡片上移动
 const handleDragOver = (e: DragEvent) => {
-  // 只有"我的提示词"页面才允许拖拽添加标签
-  if (props.filter !== 'my') return
   e.preventDefault()
   if (e.dataTransfer) {
     e.dataTransfer.dropEffect = 'copy'
@@ -632,8 +696,6 @@ const handleDragOver = (e: DragEvent) => {
 
 // 处理拖拽离开卡片
 const handleDragLeave = (e: DragEvent, prompt: PromptItem) => {
-  // 只有"我的提示词"页面才允许拖拽添加标签
-  if (props.filter !== 'my') return
   e.preventDefault()
   // 检查是否真的离开了卡片（而不是进入子元素）
   const relatedTarget = e.relatedTarget as HTMLElement
@@ -649,11 +711,16 @@ const handleDragLeave = (e: DragEvent, prompt: PromptItem) => {
 
 // 处理放置标签到卡片
 const handleDrop = async (e: DragEvent, prompt: PromptItem) => {
-  // 只有"我的提示词"页面才允许拖拽添加标签
-  if (props.filter !== 'my') return
+  // 只有自己的提示词才允许拖拽添加标签
+  if (!isOwnPrompt(prompt)) return
   e.preventDefault()
   console.log('[PromptList] Drop on:', prompt.id, prompt.title)
   dragOverPromptId.value = null
+
+  // 在函数顶部声明变量，确保 finally 块可以访问
+  let tagId: number | null = null
+  let tagName: string = ''
+  let addingKey: string = ''
 
   try {
     // 获取拖拽数据
@@ -667,7 +734,9 @@ const handleDrop = async (e: DragEvent, prompt: PromptItem) => {
       return
     }
 
-    const { tagId, tagName } = JSON.parse(data)
+    const parsedData = JSON.parse(data)
+    tagId = parsedData.tagId
+    tagName = parsedData.tagName
     console.log('[PromptList] Parsed data:', { tagId, tagName })
     if (!tagId) {
       console.log('[PromptList] No tagId in data')
@@ -680,13 +749,24 @@ const handleDrop = async (e: DragEvent, prompt: PromptItem) => {
       return
     }
 
+    // 防重复：检查是否正在添加该标签
+    addingKey = `${prompt.id}:${tagId}`
+    if (addingTags.value.has(addingKey)) {
+      console.log('[PromptList] Tag is already being added:', addingKey)
+      return
+    }
+
+    // 添加到处理中集合，防止重复
+    addingTags.value.add(addingKey)
+
     // 乐观更新：先在UI上添加标签
     prompt.tags.push(tagName)
     toast(`正在添加标签「${tagName}」...`, 'info')
 
     // 调用API添加标签
-    console.log('[PromptList] Calling API to add tag:', { promptId: prompt.id, tagId })
-    const res = await addTagToPrompt(prompt.id, tagId)
+    const promptId = Number(prompt.id)
+    console.log('[PromptList] Calling API to add tag:', { promptId, tagId })
+    const res = await addTagToPrompt(promptId, tagId)
     console.log('[PromptList] API response:', res)
 
     // API 成功返回（request.ts 拦截器会在成功时直接返回 data）
@@ -703,12 +783,19 @@ const handleDrop = async (e: DragEvent, prompt: PromptItem) => {
   } catch (error: any) {
     console.error('[PromptList] Drop error:', error)
     // 发生错误，回滚乐观更新
-    const index = prompt.tags.indexOf(tagName)
-    if (index > -1) {
-      prompt.tags.splice(index, 1)
+    if (tagName) {
+      const index = prompt.tags.indexOf(tagName)
+      if (index > -1) {
+        prompt.tags.splice(index, 1)
+      }
     }
     const message = error?.response?.data?.message || '添加标签失败'
     toast(message, 'error')
+  } finally {
+    // 无论成功失败，都从处理中集合移除
+    if (addingKey) {
+      addingTags.value.delete(addingKey)
+    }
   }
 }
 
@@ -727,12 +814,23 @@ onMounted(() => {
   window.addEventListener('click', handleClickOutside)
   // Ensure we start at the top
   // window.scrollTo(0, 0)
-  fetchPromptsList(false)
+  // fetchPromptsList(false) // Removed: handled by immediate watch
   setupObserver()
 })
 
 onActivated(() => {
+  setupObserver()
+  const currentKey = getQueryKey()
+  if (prompts.value.length > 0 && lastQueryKey.value === currentKey) return
+  if (loading.value) return
+  currentPage.value = 1
   fetchPromptsList(false)
+})
+
+onDeactivated(() => {
+  if (observer) {
+    observer.disconnect()
+  }
 })
 
 onBeforeUnmount(() => {
@@ -813,7 +911,8 @@ onBeforeUnmount(() => {
               :class="{
                 'selected': selectedPrompts.has(prompt.id),
                 'delete-mode': isDeleteMode || isShareMode || isBatchTagMode,
-                'drag-over': dragOverPromptId === prompt.id
+                'drag-over': dragOverPromptId === prompt.id,
+                'is-own': isOwnPrompt(prompt) && filter === 'plaza'
               }"
               @dragenter="handleDragEnter($event, prompt)"
               @dragover="handleDragOver"
@@ -821,6 +920,16 @@ onBeforeUnmount(() => {
               @drop="handleDrop($event, prompt)"
               @click="handleCardClick(prompt)"
             >
+              <!-- Loading Overlay -->
+              <div v-if="navigatingId === prompt.id" class="card-loading-overlay">
+                <div class="spinner"></div>
+              </div>
+
+              <!-- 属于我的提示词标识 -->
+              <div v-if="isOwnPrompt(prompt) && filter === 'plaza'" class="own-badge">
+                <User :size="10" />
+                <span>我的</span>
+              </div>
               <!-- 批量操作模式选择框 -->
               <div
                 v-if="isDeleteMode || isShareMode || isBatchTagMode"
@@ -846,7 +955,7 @@ onBeforeUnmount(() => {
                     >
                       <Link :size="18" />
                     </button>
-                    <button v-if="filter !== 'my'" class="like-btn" :class="{ 'liked': prompt.isLiked }" @click.stop="handleToggleLike(prompt)">
+                    <button v-if="filter === 'plaza'" class="like-btn" :class="{ 'liked': prompt.isLiked }" @click.stop="handleToggleLike(prompt)">
                       <ThumbsUp :size="18" :fill="prompt.isLiked ? 'currentColor' : 'none'" />
                     </button>
                     <button class="like-btn" :class="{ 'favorited': prompt.isFavorited }" @click.stop="handleToggleFavorite(prompt)">
@@ -854,7 +963,7 @@ onBeforeUnmount(() => {
                     </button>
                     <!-- 设置按钮 - 只在"我的提示词"页面显示 -->
                     <button
-                      v-if="filter === 'my' && isOwnPrompt(prompt)"
+                      v-if="filter !== 'plaza' && isOwnPrompt(prompt)"
                       class="like-btn settings-btn"
                       title="设置"
                       @click.stop="showSettings($event, prompt)"
@@ -881,7 +990,7 @@ onBeforeUnmount(() => {
                 <p class="prompt-desc">{{ prompt.description || (prompt.content ? prompt.content.slice(0, 100) + (prompt.content.length > 100 ? '...' : '') : '暂无描述') }}</p>
                 <div class="card-tags">
                   <span 
-                    v-for="tag in (prompt.tags || []).slice(0, 2)" 
+                    v-for="tag in [...new Set(prompt.tags || [])]" 
                     :key="tag" 
                     class="tag"
                     :class="getTagTone(tag)"
@@ -1288,6 +1397,62 @@ onBeforeUnmount(() => {
 .prompt-card:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow-card);
+}
+
+.card-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  border-radius: inherit;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--primary-light);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Own Prompt Badge & Effect */
+.prompt-card.is-own {
+  border: 1px solid var(--primary-light);
+  background: linear-gradient(to bottom right, var(--bg-surface), rgba(var(--primary-rgb), 0.02));
+}
+
+.own-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 4px 10px 4px 8px;
+  background: var(--primary);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  border-bottom-right-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+  box-shadow: 2px 2px 8px rgba(var(--primary-rgb), 0.2);
+  letter-spacing: 0.5px;
+}
+
+.own-badge span {
+  line-height: 1;
 }
 
 /* Drag and Drop Styles */

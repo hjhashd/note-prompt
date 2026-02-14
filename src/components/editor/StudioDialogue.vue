@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, nextTick, watch, onUnmounted, onMounted } from 'vue'
+import { ref, nextTick, watch, onUnmounted, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { chatStream, autoGenerateTitle, regenerateChatStream } from '@/api/lyf-ai'
-import { getPromptDetail } from '@/api/prompt'
+import { chatStream, autoGenerateTitle, regenerateChatStream, getSessionByPromptId } from '@/api/lyf-ai'
+import { getPromptDetail, getPrompts } from '@/api/prompt'
+import type { PromptItem } from '@/types/prompt'
+import { useUserStore } from '@/stores/user'
 import AiContentRenderer from '@/components/editor/AiContentRenderer.vue'
 import PromptReferenceCard from '@/components/editor/PromptReferenceCard.vue'
 import CopyButton from '@/components/common/CopyButton.vue'
@@ -20,21 +22,53 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const messagesContainer = ref<HTMLElement | null>(null)
 
 const chatStore = useChatStore()
 const { messages, currentSessionId, isOptimizing, pendingQueue, sessions } = storeToRefs(chatStore)
 
+const lastEnsuredSessionId = ref<number | null>(null)
+
 const ensureRefPromptCard = async (sid: number) => {
+  if (lastEnsuredSessionId.value === sid) return
+  
   const session = sessions.value.find(s => s.session_id === sid)
   const refId = session?.ref_prompt_id
-  if (!refId) return
+  const originPromptId = session?.origin_prompt_id
+  
+  if (!refId) {
+    lastEnsuredSessionId.value = sid
+    return
+  }
 
-  const exists = messages.value.some((m: any) => m?.type === 'prompt-ref' && m?.promptData?.id === refId)
-  if (exists) return
+  if (originPromptId && Number(refId) === Number(originPromptId)) {
+    lastEnsuredSessionId.value = sid
+    return
+  }
+
+  const hasAnyPromptRef = messages.value.some((m: any) => m?.type === 'prompt-ref')
+  if (hasAnyPromptRef) {
+    lastEnsuredSessionId.value = sid
+    return
+  }
 
   try {
     const prompt = await getPromptDetail(refId)
+    
+    const currentUserId = userStore.userInfo?.id
+    const isOwnPrompt = String(currentUserId) === String(prompt.author?.id || prompt.user_id)
+    if (isOwnPrompt) {
+      lastEnsuredSessionId.value = sid
+      return
+    }
+    
+    const stillHasPromptRef = messages.value.some((m: any) => m?.type === 'prompt-ref')
+    if (stillHasPromptRef) {
+      lastEnsuredSessionId.value = sid
+      return
+    }
+    
     emit('prompt-loaded', prompt)
     messages.value.unshift({
       id: Date.now(),
@@ -43,12 +77,16 @@ const ensureRefPromptCard = async (sid: number) => {
       type: 'prompt-ref',
       promptData: prompt
     } as any)
+    lastEnsuredSessionId.value = sid
   } catch (e) {
     console.error('Failed to load referenced prompt detail:', e)
   }
 }
 
-watch([currentSessionId, sessions], ([sid]) => {
+watch(currentSessionId, (sid, oldSid) => {
+  if (sid !== oldSid) {
+    lastEnsuredSessionId.value = null
+  }
   if (!sid) return
   ensureRefPromptCard(sid)
 }, { immediate: true })
@@ -115,6 +153,86 @@ const inputRef = ref<HTMLTextAreaElement | null>(null)
 
 const editingMessageId = ref<number | null>(null)
 
+// Prompt Autocomplete Logic
+const showPromptMenu = ref(false)
+const promptMenuItems = ref<PromptItem[]>([])
+const menuFilter = ref('')
+const selectedMenuIndex = ref(0)
+
+const filteredPromptMenuItems = computed(() => {
+  if (!menuFilter.value) return promptMenuItems.value
+  const lower = menuFilter.value.toLowerCase()
+  return promptMenuItems.value.filter(p => p.title.toLowerCase().includes(lower))
+})
+
+const loadMyPrompts = async () => {
+  try {
+    const res = await getPrompts({ filter: 'my', pageSize: 100 })
+    promptMenuItems.value = res.list || []
+  } catch (e) {
+    console.error('Failed to load my prompts for autocomplete:', e)
+  }
+}
+
+// 监听输入，检测 @ 触发菜单
+const handleInput = (e: Event) => {
+  const target = e.target as HTMLTextAreaElement
+  const val = target.value
+  const cursorPos = target.selectionStart
+  
+  // 查找光标前的最后一个 @
+  const lastAtPos = val.lastIndexOf('@', cursorPos - 1)
+  
+  if (lastAtPos !== -1) {
+    // 获取 @ 到光标之间的内容作为过滤词
+    const query = val.slice(lastAtPos + 1, cursorPos)
+    
+    // 简单的启发式规则：如果包含换行符，或者距离太远（例如超过20字符），则不认为是触发菜单
+    // 这里用户要求流畅，我们假设单行输入 @ 后紧跟关键词
+    if (query.includes('\n') || query.length > 20) {
+      showPromptMenu.value = false
+    } else {
+      menuFilter.value = query
+      showPromptMenu.value = true
+      // 重置选择索引
+      selectedMenuIndex.value = 0
+    }
+  } else {
+    showPromptMenu.value = false
+  }
+  
+  nextTick(adjustInputHeight)
+}
+
+const selectPrompt = (prompt: PromptItem) => {
+  if (!inputRef.value) return
+  
+  const val = input.value
+  const cursorPos = inputRef.value.selectionStart
+  const lastAtPos = val.lastIndexOf('@', cursorPos - 1)
+  
+  if (lastAtPos !== -1) {
+    const before = val.slice(0, lastAtPos)
+    // 替换 @keyword 为 提示词内容
+    // 如果提示词内容很长，直接插入可能会让输入框变得很大，但这是用户期望的
+    // "点击后带着内容到对话框" -> 替换 @
+    const after = val.slice(cursorPos)
+    
+    input.value = before + (prompt.content || '') + after
+    showPromptMenu.value = false
+    
+    // 将光标移动到插入内容的末尾
+    nextTick(() => {
+      if (inputRef.value) {
+        inputRef.value.focus()
+        const newCursorPos = before.length + (prompt.content || '').length
+        inputRef.value.setSelectionRange(newCursorPos, newCursorPos)
+        adjustInputHeight()
+      }
+    })
+  }
+}
+
 const adjustInputHeight = () => {
   const textarea = inputRef.value
   if (!textarea) return
@@ -137,8 +255,83 @@ const handleOptimizePrompt = (content: string) => {
   })
 }
 
+const runOptimizeRecord = async (content: string) => {
+  if (!content || isOptimizing.value || isSending.value) return
+  isSending.value = true
+  isOptimizing.value = true
+  const aiMsgId = Date.now()
+  const aiMsg: any = {
+    id: aiMsgId,
+    role: 'ai',
+    content: '',
+    isStreaming: true
+  }
+  messages.value.push(aiMsg)
+  const currentAiMsgIndex = messages.value.length - 1
+  abortController.value = new AbortController()
+  try {
+    await chatStream(
+      { query: `@ ${content}`, session_id: currentSessionId.value || undefined },
+      (chunk) => {
+        pendingQueue.value.push({ msgId: aiMsgId, text: chunk })
+        if (!rafId) {
+          rafId = requestAnimationFrame(processQueue)
+        }
+      },
+      undefined,
+      () => {
+        abortController.value = null
+        const msg = messages.value[currentAiMsgIndex]
+        if (msg) msg.isStreaming = false
+        isOptimizing.value = false
+        isSending.value = false
+        scrollToBottom(true)
+      },
+      (error) => {
+        console.error('Chat optimize error:', error)
+        abortController.value = null
+        const msg = messages.value[currentAiMsgIndex]
+        if (msg) msg.isStreaming = false
+        isOptimizing.value = false
+        isSending.value = false
+      },
+      abortController.value.signal
+    )
+  } catch (e) {
+    console.error('Failed to start optimize with @:', e)
+    abortController.value = null
+    const msg = messages.value[currentAiMsgIndex]
+    if (msg) msg.isStreaming = false
+    isOptimizing.value = false
+    isSending.value = false
+  }
+}
+
 // Handle Enter key: Enter to send, Shift+Enter for new line
 const handleKeydown = (e: KeyboardEvent) => {
+  if (showPromptMenu.value && filteredPromptMenuItems.value.length > 0) {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      selectedMenuIndex.value = (selectedMenuIndex.value - 1 + filteredPromptMenuItems.value.length) % filteredPromptMenuItems.value.length
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      selectedMenuIndex.value = (selectedMenuIndex.value + 1) % filteredPromptMenuItems.value.length
+      return
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      selectPrompt(filteredPromptMenuItems.value[selectedMenuIndex.value])
+      return
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      showPromptMenu.value = false
+      return
+    }
+  }
+
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
@@ -297,6 +490,9 @@ const sendMessage = async () => {
       if (!sid || currentSessionId.value) return
       // Update session ID in store (loadSessions will be called at the end of stream)
       chatStore.currentSessionId = sid
+
+      // 清除临时会话状态
+      chatStore.clearTempSession()
 
       // Update URL
       const query: Record<string, any> = { ...route.query }
@@ -458,6 +654,9 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   await chatStore.loadSessions()
   
+  // Load prompts for autocomplete
+  loadMyPrompts()
+  
   // Priority 1: Check for session_id (Existing Chat)
   const routeSessionId = route.query.session_id
   if (routeSessionId) {
@@ -478,19 +677,80 @@ onMounted(async () => {
   // Priority 2: Check for promptId (New Chat from Prompt)
   const promptId = route.query.promptId
   if (promptId) {
-    // Force reset to draft mode to avoid mixing with previous session
-    chatStore.openDraftSession()
-    
-    try {
-      const id = parseInt(promptId as string)
-      if (!isNaN(id)) {
-        const prompt = await getPromptDetail(id)
+    const id = parseInt(promptId as string)
+    if (!isNaN(id)) {
+      try {
+        // 尝试从 history.state 获取预加载数据，避免重复请求
+        const state = history.state as { initialPrompt?: any } | null
+        let prompt = null
         
+        if (state?.initialPrompt && String(state.initialPrompt.id) === String(id)) {
+          prompt = state.initialPrompt
+        } else {
+          prompt = await getPromptDetail(id)
+        }
+        
+        if (!prompt) return
+
         // 通知父组件已加载提示词
         emit('prompt-loaded', prompt)
         
-        // Set draft title
+        // 检查是否是自己的提示词，如果是且存在关联会话，则跳转到该会话
+        const currentUserId = userStore.userInfo?.id
+        const isOwnPrompt = String(currentUserId) === String(prompt.author?.id || prompt.user_id)
+        
+        if (isOwnPrompt) {
+          // 查找是否存在关联的会话
+          const sessionResult = await getSessionByPromptId(id)
+          if (sessionResult.found && sessionResult.session) {
+            // 存在关联会话，直接跳转到该会话
+            const sid = sessionResult.session.session_id
+            chatStore.currentSessionId = sid
+            await chatStore.loadSessionHistory(sid)
+            
+            // 更新 URL，移除 promptId，添加 session_id
+            const query: Record<string, any> = { ...route.query }
+            delete query.promptId
+            query.session_id = String(sid)
+            await router.replace({ query })
+            return
+          }
+          
+          // 自己的提示词但没有会话记录，创建草稿会话，显示普通文本消息
+          chatStore.openDraftSession()
+          chatStore.draftTitle = prompt.title || '新对话'
+          
+          // 设置临时会话状态
+          chatStore.setTempSession({
+            id: `temp-own-${prompt.id}`,
+            title: prompt.title,
+            promptId: prompt.id,
+            isOwnPrompt: true,
+            promptData: prompt
+          })
+          
+          // 显示普通文本消息，不加"引用内容"特效
+          messages.value.push({
+            id: Date.now(),
+            role: 'ai',
+            content: prompt.content || '',
+            type: 'text'
+          })
+          return
+        }
+        
+        // 别人的提示词，创建新的草稿会话，显示"引用内容"卡片
+        chatStore.openDraftSession()
         chatStore.draftTitle = prompt.title || '新对话'
+        
+        // 设置临时会话状态
+        chatStore.setTempSession({
+          id: `temp-ref-${prompt.id}`,
+          title: prompt.title,
+          promptId: prompt.id,
+          isOwnPrompt: false,
+          promptData: prompt
+        })
         
         messages.value.push({
           id: Date.now(),
@@ -499,9 +759,9 @@ onMounted(async () => {
           type: 'prompt-ref',
           promptData: prompt
         })
+      } catch (e) {
+        console.error('Failed to load prompt detail:', e)
       }
-    } catch (e) {
-      console.error('Failed to load prompt detail:', e)
     }
     return
   }
@@ -545,8 +805,8 @@ onUnmounted(() => {
                     compact
                   />
                   <div class="message-actions" v-if="!msg.isStreaming">
-                    <CopyButton :text="msg.content" />
-                    <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
+                    <CopyButton :text="msg.promptData.content" />
+                    <button class="action-btn-pill" @click="emit('open-test', msg.promptData.content)" title="在测试台中打开">
                       <FlaskConical :size="14" />
                       <span>测试</span>
                     </button>
@@ -558,30 +818,49 @@ onUnmounted(() => {
                       <Save :size="14" />
                       <span>保存</span>
                     </button>
+                    <button class="action-btn-pill" type="button" title="优化此内容" @click="runOptimizeRecord(msg.promptData.content || msg.content)" :disabled="isOptimizing || isSending">
+                      <Sparkles :size="14" />
+                      <span>优化</span>
+                    </button>
                   </div>
                 </div>
 
-                <AiContentRenderer 
-                  v-else-if="msg.role === 'ai'" 
-                  :content="msg.content"
-                  :is-streaming="msg.isStreaming"
-                  :show-copy="msg.type !== 'welcome'"
-                >
-                  <template #actions v-if="!msg.isStreaming && msg.type !== 'welcome'">
-                    <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
-                      <FlaskConical :size="14" />
-                      <span>测试</span>
-                    </button>
-                    <button class="action-btn-pill" @click="emit('switch-expert', msg.content, msg.id)" title="切换到专家模式编辑">
-                      <Code2 :size="14" />
-                      <span>专家模式</span>
-                    </button>
-                    <button class="action-btn-pill" type="button" title="保存" @click="emit('open-save', msg.id)">
-                      <Save :size="14" />
-                      <span>保存</span>
-                    </button>
-                  </template>
-                </AiContentRenderer>
+                <div v-else-if="msg.role === 'ai'" class="ai-message-wrapper">
+                  <!-- 已保存提示词标记 -->
+                  <div v-if="msg.type === 'saved'" class="saved-prompt-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                      <line x1="16" y1="13" x2="8" y2="13"></line>
+                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    <span>已保存的提示词</span>
+                  </div>
+                  <AiContentRenderer
+                    :content="msg.content"
+                    :is-streaming="msg.isStreaming"
+                    :show-copy="msg.type !== 'welcome'"
+                  >
+                    <template #actions v-if="!msg.isStreaming && msg.type !== 'welcome'">
+                      <button class="action-btn-pill" @click="emit('open-test', msg.content)" title="在测试台中打开">
+                        <FlaskConical :size="14" />
+                        <span>测试</span>
+                      </button>
+                      <button class="action-btn-pill" @click="emit('switch-expert', msg.content, msg.id)" title="切换到专家模式编辑">
+                        <Code2 :size="14" />
+                        <span>专家模式</span>
+                      </button>
+                      <button class="action-btn-pill" type="button" title="保存" @click="emit('open-save', msg.id)">
+                        <Save :size="14" />
+                        <span>保存</span>
+                      </button>
+                      <button class="action-btn-pill" type="button" title="优化此内容" @click="runOptimizeRecord(msg.content)" :disabled="isOptimizing || isSending">
+                        <Sparkles :size="14" />
+                        <span>优化</span>
+                      </button>
+                    </template>
+                  </AiContentRenderer>
+                </div>
 
                 <div v-else-if="msg.role !== 'ai'" style="white-space: pre-wrap;">{{ msg.content }}</div>
               </div>
@@ -614,18 +893,37 @@ onUnmounted(() => {
 
         <div class="chat-input-area">
           <div class="chat-input-wrapper">
+            <!-- Prompt Autocomplete Menu -->
+            <div v-if="showPromptMenu && filteredPromptMenuItems.length > 0" class="prompt-menu">
+              <div 
+                v-for="(item, index) in filteredPromptMenuItems" 
+                :key="item.id"
+                class="prompt-menu-item"
+                :class="{ active: index === selectedMenuIndex }"
+                @click="selectPrompt(item)"
+                @mousedown.prevent
+              >
+                <div class="prompt-menu-icon">
+                  <Sparkles :size="14" />
+                </div>
+                <div class="prompt-menu-info">
+                  <div class="prompt-menu-title">{{ item.title }}</div>
+                  <div class="prompt-menu-preview">{{ item.content?.slice(0, 30) }}...</div>
+                </div>
+              </div>
+            </div>
+
             <textarea 
               ref="inputRef"
               class="chat-input" 
               v-model="input"
               placeholder="描述你的需求，或使用 @ 引用提示词...&#10;Enter 发送，Shift+Enter 换行"
               @keydown="handleKeydown"
+              @input="handleInput"
+              @blur="() => setTimeout(() => showPromptMenu = false, 200)"
             ></textarea>
             
             <div class="chat-input-actions">
-              <button class="action-btn" title="优化" type="button">
-                <Sparkles :size="16" />
-              </button>
               <button class="action-btn" title="导入/导出" type="button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
@@ -661,6 +959,76 @@ onUnmounted(() => {
 
 
 <style scoped>
+.chat-input-wrapper {
+  position: relative;
+  /* ... existing styles if any ... */
+}
+
+.prompt-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 100%;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  margin-bottom: 8px;
+  z-index: 100;
+  padding: 4px;
+}
+
+.prompt-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.prompt-menu-item:hover, .prompt-menu-item.active {
+  background: var(--bg-primary);
+}
+
+.prompt-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  color: var(--primary);
+}
+
+.prompt-menu-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.prompt-menu-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-menu-preview {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .message-actions {
   margin-top: 12px;
   display: flex;
@@ -695,6 +1063,30 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
+/* 已保存提示词标记 */
+.ai-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saved-prompt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  width: fit-content;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
+}
+
+.saved-prompt-badge svg {
+  stroke: white;
+}
 
 .chat-container {
   display: flex;

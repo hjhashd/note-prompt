@@ -39,7 +39,7 @@ export interface PromptListParams {
   filter?: 'all' | 'my' | 'favorites' | 'shared' | 'plaza'
   sort?: 'updatedAt' | 'createdAt' | 'views' | 'likes'
   order?: 'asc' | 'desc'
-  tagId?: number | null
+  tagId?: number | number[] | null
   deptId?: number | null
 }
 

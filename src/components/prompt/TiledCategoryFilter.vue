@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { X, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-vue-next'
 import { getTagsTree, getUserTagsTree } from '@/api/prompt'
 import { getPythonTagsTree, deletePersonalTag, deletePublicTag } from '@/api/promptSave'
@@ -7,20 +7,21 @@ import { useToast } from '@/composables/useToast'
 import type { TagItem } from '@/types/prompt'
 
 const props = defineProps<{
-  modelValue: number | null,
+  modelValue: number | number[] | null,
   parentId?: number | null,
   type?: 'public' | 'user',
   enableDrag?: boolean
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', id: number | null): void
-  (e: 'select', payload: { id: number | null, node?: TagItem })
+  (e: 'update:modelValue', id: number | number[] | null): void
+  (e: 'select', payload: { id: number | number[] | null, node?: TagItem })
   (e: 'tagDeleted', tagId: number): void
 }>()
 
 const { toast } = useToast()
 const currentUserId = ref<number | null>(null)
+const isLoading = ref(false)
 
 const fullTree = ref<TagItem[]>([]) // Store raw tree (departments)
 const personalTags = ref<TagItem[]>([]) // Store personal tags (type=2)
@@ -80,6 +81,8 @@ watch(() => props.parentId, () => {
 })
 
 const fetchTags = async () => {
+  if (isLoading.value) return
+  isLoading.value = true
   try {
     if (props.type === 'user') {
       // For user tags, fetch from Java backend (getUserTagsTree)
@@ -137,6 +140,8 @@ const fetchTags = async () => {
     updateChildTags()
   } catch (error) {
     console.error('Failed to fetch tags:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -144,25 +149,47 @@ onMounted(() => {
   fetchTags()
 })
 
+onActivated(() => {
+  fetchTags()
+})
+
 // Current active selection logic
-// If modelValue == parentId, it means "All" (no specific child tag selected)
-// If modelValue != parentId, it should be one of the child tags
 const activeTagId = computed(() => {
-  if (props.modelValue === props.parentId) return null // "All" is active
   return props.modelValue
 })
 
 const handleSelect = (id: number | null, node?: TagItem) => {
-  // Toggle logic: If clicking the currently active tag, deselect it (revert to "All"/null)
-  if (id !== null && props.modelValue === id) {
+  if (id === null) {
+    // "All" clicked - clear all selections
     emit('update:modelValue', null)
     emit('select', { id: null, node: undefined })
     return
   }
 
-  // If id is null, it means "All" was clicked
-  emit('update:modelValue', id)
-  emit('select', { id, node })
+  let newValue: number | number[] | null = null
+
+  if (props.modelValue === null) {
+    // Nothing selected, start with an array containing the new ID
+    newValue = [id]
+  } else if (Array.isArray(props.modelValue)) {
+    // Already an array, toggle the ID
+    if (props.modelValue.includes(id)) {
+      newValue = props.modelValue.filter(v => v !== id)
+      if (newValue.length === 0) newValue = null
+    } else {
+      newValue = [...props.modelValue, id]
+    }
+  } else {
+    // Single number selected, toggle or convert to array
+    if (props.modelValue === id) {
+      newValue = null
+    } else {
+      newValue = [props.modelValue, id]
+    }
+  }
+
+  emit('update:modelValue', newValue)
+  emit('select', { id: newValue, node })
 }
 
 // 标签删除相关
@@ -260,8 +287,15 @@ const confirmDeleteTag = async () => {
     toast(actionText, 'success')
     emit('tagDeleted', tagId)
     
-    // 如果删除的是当前选中的标签，重置选择
-    if (props.modelValue === tagId) {
+    // 如果删除的是当前选中的标签，从选择中移除
+    if (Array.isArray(props.modelValue)) {
+      if (props.modelValue.includes(tagId)) {
+        const newValue = props.modelValue.filter(id => id !== tagId)
+        const emitValue = newValue.length > 0 ? newValue : null
+        emit('update:modelValue', emitValue)
+        emit('select', { id: emitValue, node: undefined })
+      }
+    } else if (props.modelValue === tagId) {
       emit('update:modelValue', null)
       emit('select', { id: null, node: undefined })
     }
@@ -300,7 +334,7 @@ const confirmDeleteTag = async () => {
           :key="item.id"
           class="filter-chip deletable"
           :class="{ 
-            active: activeTagId === item.id, 
+            active: Array.isArray(activeTagId) ? activeTagId.includes(item.id) : activeTagId === item.id, 
             'draggable': enableDrag,
             'is-dragging': enableDrag && draggedTag?.id === item.id 
           }"

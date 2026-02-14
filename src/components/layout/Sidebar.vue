@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { 
   PanelLeft,
@@ -87,12 +87,21 @@ watch(
   { immediate: true }
 )
 
-const navItems = [
-  { id: 'home', label: '提示词广场', icon: FolderOpen },
-  { id: 'my-prompts', label: '我的提示词', icon: Home },
-  { id: 'profile', label: '个人中心', icon: User },
-  { id: 'admin', label: '管理员面板', icon: Shield }
-]
+const navItems = computed(() => {
+  const items = [
+    { id: 'home', label: '提示词广场', icon: FolderOpen },
+    { id: 'my-prompts', label: '我的提示词', icon: Home },
+    { id: 'profile', label: '个人中心', icon: User }
+  ]
+  
+  // 只有管理员才显示管理员面板
+  const userRoles = userStore.userInfo?.roles || []
+  if (userRoles.includes('admin')) {
+    items.push({ id: 'admin', label: '管理员面板', icon: Shield })
+  }
+  
+  return items
+})
 </script>
 
 <template>

@@ -187,6 +187,28 @@ export async function regenerateChatStream(
   )
 }
 
+/**
+ * 针对指定的 AI 消息进行“就地优化重写”（不新增消息），生成完成后更新该消息的 content
+ */
+export async function optimizeMessageInplaceStream(
+  sessionId: number,
+  messageId: number,
+  onMessage: (content: string) => void,
+  onDone?: () => void,
+  onError?: (error: any) => void,
+  signal?: AbortSignal
+) {
+  return handleStreamRequest(
+    `/api/python/ai/chat/v2/sessions/${sessionId}/messages/${messageId}/optimize-inplace/stream`,
+    {},
+    onMessage,
+    undefined,
+    onDone,
+    onError,
+    signal
+  )
+}
+
 async function handleJsonRequest<TResponse = any>(
   url: string,
   options: RequestInit
@@ -217,6 +239,7 @@ export interface ChatSessionItem {
   status?: string
   origin_prompt_id?: number
   ref_prompt_id?: number
+  final_content?: string
 }
 
 export interface ChatMessageItem {
@@ -224,6 +247,11 @@ export interface ChatMessageItem {
   role: 'user' | 'assistant' | 'system'
   content: string
   create_time?: string
+}
+
+export interface ChatSessionMessagesResponse {
+  session: ChatSessionItem
+  messages: ChatMessageItem[]
 }
 
 export async function createChatSession(title?: string) {
@@ -240,10 +268,17 @@ export async function listChatSessions(limit = 50, status?: string) {
   return handleJsonRequest<ChatSessionItem[]>(url.pathname + url.search, { method: 'GET' })
 }
 
+export async function getSessionByPromptId(promptId: number) {
+  return handleJsonRequest<{ 
+    found: boolean
+    session: ChatSessionItem | null 
+  }>(`/api/python/ai/chat/v2/sessions/by-prompt/${promptId}`, { method: 'GET' })
+}
+
 export async function getChatSessionMessages(sessionId: number, limit = 200) {
   const url = new URL(`/api/python/ai/chat/v2/sessions/${sessionId}/messages`, window.location.origin)
   url.searchParams.set('limit', String(limit))
-  return handleJsonRequest<ChatMessageItem[]>(url.pathname + url.search, { method: 'GET' })
+  return handleJsonRequest<ChatSessionMessagesResponse>(url.pathname + url.search, { method: 'GET' })
 }
 
 export async function forkChatSession(sessionId: number, uptoMessageId: number, title?: string) {

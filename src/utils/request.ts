@@ -7,6 +7,9 @@ import { useToast } from '@/composables/useToast'
 const service: AxiosInstance = axios.create({
   baseURL: '/api', // 统一使用 /api 前缀，配合 proxy/nginx 转发
   timeout: 10000,
+  paramsSerializer: {
+    indexes: null // 序列化数组为 tagId=1&tagId=2 而不是 tagId[]=1
+  }
 })
 
 // 请求拦截器
