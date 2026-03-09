@@ -49,6 +49,12 @@ const showRefBanner = computed(() => {
   return String(currentUserId) !== String(referencedPrompt.value.author?.id)
 })
 
+const isReferencingOthersPrompt = computed(() => {
+  if (!referencedPrompt.value) return false
+  const currentUserId = userStore.userInfo?.id
+  return String(currentUserId) !== String(referencedPrompt.value.author?.id)
+})
+
 watch(() => route.query.session_id, (sessionId) => {
   if (sessionId) {
     referencedPrompt.value = null
@@ -82,8 +88,13 @@ watch(currentSessionTitle, (newTitle) => {
 watch(() => chatStore.messages, (newMessages) => {
   if (!lockedMessageId.value && newMessages.length > 0) {
     const lastMsg = newMessages[newMessages.length - 1] as any
-    if (lastMsg && !lastMsg.isStreaming && lastMsg.content) {
-      promptContent.value = lastMsg.content
+    if (lastMsg && !lastMsg.isStreaming) {
+      // 如果是 prompt-ref 类型的消息，从 promptData 中获取真正的提示词内容
+      if (lastMsg.type === 'prompt-ref' && lastMsg.promptData?.content) {
+        promptContent.value = lastMsg.promptData.content
+      } else if (lastMsg.content) {
+        promptContent.value = lastMsg.content
+      }
     }
   }
 }, { deep: true, immediate: true })
@@ -134,8 +145,16 @@ const handleOpenSaveModal = (messageId?: number | string) => {
 }
 
 const handlePromptSaved = async (result: any) => {
+  const isForked = result?.is_forked || result?.data?.is_forked
   const isUpdate = result?.is_update || result?.data?.is_update
-  toast(isUpdate ? '提示词更新成功' : '提示词保存成功', 'success')
+  
+  let successMsg = '提示词保存成功'
+  if (isForked) {
+    successMsg = '已引用并创建新提示词'
+  } else if (isUpdate) {
+    successMsg = '提示词更新成功'
+  }
+  toast(successMsg, 'success')
 
   const promptId = result?.prompt_id || result?.data?.prompt_id
   const sessionId = result?.session_id || result?.data?.session_id
@@ -476,6 +495,7 @@ onMounted(async () => {
       :prompt-content="promptContent"
       :session-id="chatStore.currentSessionId"
       :prompt-id="referencedPrompt?.id || chatStore.currentSession?.origin_prompt_id || null"
+      :original-prompt-title="isReferencingOthersPrompt ? referencedPrompt?.title : null"
       @saved="handlePromptSaved"
     />
   </div>

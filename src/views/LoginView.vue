@@ -100,9 +100,9 @@
         </div>
       </form>
 
-      <div class="text-center text-sm text-gray-500 pt-4">
+      <!-- <div class="text-center text-sm text-gray-500 pt-4">
         还没有账号？ <router-link to="/register" class="font-bold text-blue-600 hover:text-blue-500">立即注册</router-link>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>

@@ -943,33 +943,52 @@ onBeforeUnmount(() => {
               <div class="card-header">
                 <div class="header-top">
                   <div class="actions" v-if="!isDeleteMode && !isShareMode">
-                    <button class="like-btn" title="查看详情" @click.stop="openDetailModal(prompt)">
-                      <Eye :size="18" />
-                    </button>
-                    <CopyButton :text="prompt.content || ''" />
-                    <button
-                      v-if="props.showQuoteAction && !isOwnPrompt(prompt)"
-                      class="like-btn"
-                      title="引用到工作室"
-                      @click.stop="router.push({ path: '/studio', query: { promptId: prompt.id } })"
-                    >
-                      <Link :size="18" />
-                    </button>
-                    <button v-if="filter === 'plaza'" class="like-btn" :class="{ 'liked': prompt.isLiked }" @click.stop="handleToggleLike(prompt)">
-                      <ThumbsUp :size="18" :fill="prompt.isLiked ? 'currentColor' : 'none'" />
-                    </button>
-                    <button class="like-btn" :class="{ 'favorited': prompt.isFavorited }" @click.stop="handleToggleFavorite(prompt)">
-                      <Heart :size="18" :fill="prompt.isFavorited ? 'currentColor' : 'none'" />
-                    </button>
-                    <!-- 设置按钮 - 只在"我的提示词"页面显示 -->
-                    <button
-                      v-if="filter !== 'plaza' && isOwnPrompt(prompt)"
-                      class="like-btn settings-btn"
-                      title="设置"
-                      @click.stop="showSettings($event, prompt)"
-                    >
-                      <MoreVertical :size="18" />
-                    </button>
+                    <!-- 广场模式 & 我的提示词模式：统一使用“图标+数值”合并布局 -->
+                    <template v-if="filter === 'plaza' || filter !== 'plaza'">
+                      <button class="action-btn-with-stat" title="查看详情" @click.stop="openDetailModal(prompt)">
+                        <Eye :size="16" />
+                        <span class="stat-num">{{ prompt.stats.views }}</span>
+                      </button>
+                      
+                      <!-- 点赞按钮：广场模式可交互，非广场模式（如我的提示词）仅显示数值 -->
+                      <button 
+                        class="action-btn-with-stat" 
+                        :class="{ 
+                          'liked': prompt.isLiked,
+                          'no-interact': filter !== 'plaza' 
+                        }" 
+                        :title="filter === 'plaza' ? '点赞' : '点赞数'" 
+                        @click.stop="filter === 'plaza' ? handleToggleLike(prompt) : null"
+                      >
+                        <ThumbsUp :size="16" :fill="prompt.isLiked ? 'currentColor' : 'none'" />
+                        <span class="stat-num">{{ prompt.stats.likes || 0 }}</span>
+                      </button>
+
+                      <button class="action-btn-with-stat" :class="{ 'favorited': prompt.isFavorited }" title="收藏" @click.stop="handleToggleFavorite(prompt)">
+                        <Heart :size="16" :fill="prompt.isFavorited ? 'currentColor' : 'none'" />
+                        <span class="stat-num">{{ prompt.stats.favorites || 0 }}</span>
+                      </button>
+                      <div class="action-divider"></div>
+                      <CopyButton :text="prompt.content || ''" />
+                      <button
+                        v-if="props.showQuoteAction && !isOwnPrompt(prompt)"
+                        class="like-btn"
+                        title="引用到工作室"
+                        @click.stop="router.push({ path: '/studio', query: { promptId: prompt.id } })"
+                      >
+                        <Link :size="18" />
+                      </button>
+                      
+                      <!-- 设置按钮：只在自己的提示词且非广场模式显示 -->
+                      <button
+                        v-if="filter !== 'plaza' && isOwnPrompt(prompt)"
+                        class="like-btn settings-btn"
+                        title="设置"
+                        @click.stop="showSettings($event, prompt)"
+                      >
+                        <MoreVertical :size="18" />
+                      </button>
+                    </template>
                   </div>
                 </div>
                 <h3 class="prompt-title">
@@ -1013,7 +1032,7 @@ onBeforeUnmount(() => {
                   <span class="prompt-date">{{ formatTimeAgo(prompt.updatedAt) }}</span>
                 </div>
                 
-                <div class="metrics">
+                <div class="metrics" v-if="filter !== 'plaza'">
                   <div class="metric" title="浏览量">
                     <Eye :size="14" />
                     <span>{{ prompt.stats.views }}</span>
@@ -1723,12 +1742,60 @@ onBeforeUnmount(() => {
 .metrics {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
 .metric {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.action-btn-with-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.action-btn-with-stat:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-primary);
+}
+
+.action-btn-with-stat.liked {
+  color: #f59e0b;
+}
+
+.action-btn-with-stat.favorited {
+  color: #ef4444;
+}
+
+.action-btn-with-stat.no-interact {
+  cursor: default;
+  pointer-events: none;
+}
+
+.action-btn-with-stat.no-interact:hover {
+  background: transparent;
+}
+
+.stat-num {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.action-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color, rgba(0,0,0,0.06));
+  margin: 0 4px;
 }
 
 /* Unshare Bar */

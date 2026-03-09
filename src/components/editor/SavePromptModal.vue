@@ -34,6 +34,7 @@ const props = defineProps<{
   sessionId: number | null
   promptId?: number | null
   mode?: 'dialogue' | 'editor' | 'test'  // 保存模式：dialogue-对话, editor-编辑器, test-测试
+  originalPromptTitle?: string | null  // 引用的原始提示词标题（用于验证）
 }>()
 
 const emit = defineEmits<{
@@ -385,6 +386,11 @@ const handleSave = async () => {
     toast('请输入标题', 'warning')
     return
   }
+  // 引用别人的提示词时，标题不能与原标题相同
+  if (props.originalPromptTitle && form.value.title.trim() === props.originalPromptTitle.trim()) {
+    toast('标题不能与原提示词相同，请修改标题', 'warning')
+    return
+  }
   if (form.value.visibility === 'plaza' && form.value.departmentId === null) {
     toast('请选择发布部门', 'warning')
     return
@@ -440,7 +446,14 @@ const handleSave = async () => {
       }
     }
 
-    toast(form.value.promptId ? '提示词更新成功' : '提示词保存成功', 'success')
+    // 根据保存类型显示不同的提示消息
+    let successMsg = '提示词保存成功'
+    if (result.is_forked) {
+      successMsg = '已引用并创建新提示词'
+    } else if (result.is_update) {
+      successMsg = '提示词更新成功'
+    }
+    toast(successMsg, 'success')
 
     // 触发保存成功事件
     emit('saved', {

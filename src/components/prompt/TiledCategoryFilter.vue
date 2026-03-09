@@ -195,7 +195,6 @@ const handleSelect = (id: number | null, node?: TagItem) => {
 // 标签删除相关
 const showDeleteTagModal = ref(false)
 const tagToDelete = ref<TagItem | null>(null)
-const deleteTagWithPrompts = ref(false)
 const isDeletingTag = ref(false)
 
 // 标签折叠相关
@@ -258,7 +257,6 @@ const canDeleteTag = (tag: TagItem): boolean => {
 const handleDeleteTagClick = (e: Event, tag: TagItem) => {
   e.stopPropagation()
   tagToDelete.value = tag
-  deleteTagWithPrompts.value = false
   showDeleteTagModal.value = true
 }
 
@@ -266,25 +264,23 @@ const handleDeleteTagClick = (e: Event, tag: TagItem) => {
 const cancelDeleteTag = () => {
   showDeleteTagModal.value = false
   tagToDelete.value = null
-  deleteTagWithPrompts.value = false
 }
 
 // 确认删除标签
 const confirmDeleteTag = async () => {
   if (!tagToDelete.value) return
-  
+
   isDeletingTag.value = true
   try {
     const tagId = tagToDelete.value.id
-    
+
     if (props.type === 'user') {
-      await deletePersonalTag(tagId, deleteTagWithPrompts.value)
+      await deletePersonalTag(tagId, false)
     } else {
-      await deletePublicTag(tagId, deleteTagWithPrompts.value)
+      await deletePublicTag(tagId, false)
     }
-    
-    const actionText = deleteTagWithPrompts.value ? '标签及关联提示词删除成功' : '标签删除成功'
-    toast(actionText, 'success')
+
+    toast('标签删除成功', 'success')
     emit('tagDeleted', tagId)
     
     // 如果删除的是当前选中的标签，从选择中移除
@@ -379,32 +375,7 @@ const confirmDeleteTag = async () => {
       </div>
       <div class="modal-body">
         <p>确定要删除标签「<strong>{{ tagToDelete?.name }}</strong>」吗？</p>
-        
-        <div class="delete-options">
-          <label class="radio-label">
-            <input 
-              type="radio" 
-              v-model="deleteTagWithPrompts" 
-              :value="false"
-            />
-            <div class="radio-content">
-              <span class="radio-title">仅删除标签</span>
-              <span class="radio-desc">保留标签下的所有提示词，提示词将不再归类到此标签</span>
-            </div>
-          </label>
-          
-          <label class="radio-label">
-            <input 
-              type="radio" 
-              v-model="deleteTagWithPrompts" 
-              :value="true"
-            />
-            <div class="radio-content">
-              <span class="radio-title">删除标签及关联提示词</span>
-              <span class="radio-desc">同时删除该标签下的所有提示词（此操作不可恢复）</span>
-            </div>
-          </label>
-        </div>
+        <p class="delete-hint">删除后，该标签下的提示词将不再归类到此标签</p>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" @click="cancelDeleteTag" :disabled="isDeletingTag">
@@ -622,52 +593,14 @@ const confirmDeleteTag = async () => {
 }
 
 .modal-body p {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   color: var(--text-primary);
 }
 
-.delete-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.radio-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.radio-label:hover {
-  background: var(--bg-secondary);
-}
-
-.radio-label input[type="radio"] {
-  margin-top: 2px;
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.radio-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.radio-title {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.radio-desc {
+.modal-body .delete-hint {
   font-size: 13px;
   color: var(--text-secondary);
+  margin-bottom: 0;
 }
 
 .modal-footer {

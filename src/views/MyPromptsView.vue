@@ -145,7 +145,7 @@ const handleBatchShareClick = async () => {
 
   if (!isShareMode.value) {
     toggleShareMode()
-    toast('已进入批量分享模式，请点击卡片选择要分享的提示词', 'info')
+    toast('已进入批量分享模式，已自动切换到“私有提示词”视图，请点击卡片选择要分享的提示词', 'info')
     if (contentBodyRef.value) {
       contentBodyRef.value.scrollTo({ top: 0, behavior: 'smooth' })
     }
@@ -170,7 +170,7 @@ const enterBatchTagMode = async () => {
 
   if (!isBatchTagMode.value) {
     toggleBatchTagMode()
-    toast('已进入批量标签模式，请点击卡片选择要添加标签的提示词', 'info')
+    toast('已进入批量管理标签模式，已自动切换到“私有提示词”视图，请点击卡片选择要管理标签的提示词', 'info')
     if (contentBodyRef.value) {
       contentBodyRef.value.scrollTo({ top: 0, behavior: 'smooth' })
     }
@@ -347,6 +347,13 @@ const confirmShare = () => {
 // 执行删除
 const promptListRef = ref<InstanceType<typeof PromptList> | null>(null)
 
+// 标签删除后刷新提示词列表
+const onTagDeleted = () => {
+  if (promptListRef.value) {
+    promptListRef.value.fetchPromptsList()
+  }
+}
+
 const executeDelete = async () => {
   if (!promptListRef.value) return
   
@@ -500,7 +507,7 @@ onBeforeRouteLeave(() => {
 
         <div class="sticky-header">
           <div class="tools-section">
-            <TiledCategoryFilter v-model="currentTagId" type="user" :enable-drag="true" />
+            <TiledCategoryFilter v-model="currentTagId" type="user" :enable-drag="true" @tagDeleted="onTagDeleted" />
           </div>
 
           <!-- Toolbar -->

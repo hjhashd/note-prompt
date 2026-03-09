@@ -52,10 +52,15 @@ service.interceptors.response.use(
   (error) => {
     const { toast } = useToast()
     // 处理 HTTP 状态码错误
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    if (status === 401 || status === 403) {
       const userStore = useUserStore()
       userStore.clearToken()
-      toast('登录已过期，请重新进入', 'warning')
+      toast('登录已过期，请重新登录', 'warning')
+      // 延迟跳转，让用户看到提示
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 1500)
     } else {
       toast(error.message || '网络错误', 'error')
     }

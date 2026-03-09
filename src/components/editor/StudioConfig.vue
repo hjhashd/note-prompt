@@ -43,8 +43,16 @@ const handleSavePrompt = (data: any) => {
 }
 
 const handlePromptSaved = (result: any) => {
-  // 保存成功后的处理
-  toast('提示词保存成功', 'success')
+  const isForked = result?.is_forked || result?.data?.is_forked
+  const isUpdate = result?.is_update || result?.data?.is_update
+  
+  let successMsg = '提示词保存成功'
+  if (isForked) {
+    successMsg = '已引用并创建新提示词'
+  } else if (isUpdate) {
+    successMsg = '提示词更新成功'
+  }
+  toast(successMsg, 'success')
 
   // 如果会话被收敛，刷新当前会话状态
   if (result.session_status === 1) {

@@ -47,12 +47,12 @@ const router = createRouter({
       component: () => import('../views/LoginView.vue'),
       meta: { guest: true, hideSidebar: true }
     },
-    {
+    /* {
       path: '/register',
       name: 'register',
       component: () => import('../views/RegisterView.vue'),
       meta: { guest: true, hideSidebar: true }
-    },
+    }, */
   ],
 })
 
