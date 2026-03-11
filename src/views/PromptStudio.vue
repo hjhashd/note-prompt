@@ -371,6 +371,19 @@ onMounted(async () => {
       // 如果有内容和标题，也可以预设，避免闪烁
       if (state.initialContent) promptContent.value = state.initialContent
       if (state.initialTitle) promptTitle.value = state.initialTitle
+
+      // 即使使用了预加载数据，也需要在后台调用 API 以增加浏览数并更新最新状态
+      const id = parseInt(promptId as string)
+      if (!isNaN(id)) {
+        getPromptDetail(id).then(res => {
+          // 可选：更新为最新数据（如浏览数变化）
+          if (res) {
+            referencedPrompt.value = res
+          }
+        }).catch(e => {
+          console.error('Background fetch prompt detail failed:', e)
+        })
+      }
       return
     }
 

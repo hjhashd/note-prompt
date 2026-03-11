@@ -10,6 +10,7 @@ import {
   updateTagDepartment,
   type TagNode 
 } from '@/api/promptSave'
+import { createChatSession } from '@/api/lyf-ai'
 import type { TagItem } from '@/types/prompt'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
@@ -76,13 +77,24 @@ const tagSearchQuery = ref('')
 const isCreatingTag = ref(false)
 // 跟踪本次会话中新创建的标签ID（用于保存时更新department_id）
 const newlyCreatedTagIds = ref<number[]>([])
+// 用户是否选择将选中的私有标签设为公开
+const makeSelectedTagsPublic = ref(true)
+
+// 计算选中的私有标签ID列表（已存在且未公开的个人标签）
+const selectedPrivateTagIds = computed(() => {
+  return form.value.tagIds.filter(tagId => {
+    const tag = allTags.value.find(t => t.id === tagId)
+    // 只包含已存在的标签（非本次新创建）且没有 departmentId 的标签
+    return tag && !tag.departmentId && !newlyCreatedTagIds.value.includes(tagId)
+  })
+})
 
 // Filtered departments based on search query and user permission
-// 用户只能选择：全部部门(ID=1) 或 所属部门（不显示子部门）
+// 用户优先选择自己的部门，如果没有绑定部门则显示"全部部门"
 const filteredDepartments = computed(() => {
   const userDeptId = userDepartmentId.value
   const ALL_DEPT_ID = 1 // "全部部门"在数据库中的ID
-  
+
   // 从完整树中查找指定ID的部门节点（扁平化，不包含children）
   const findDeptById = (nodes: TagItem[], targetId: number): TagItem | null => {
     for (const node of nodes) {
@@ -97,31 +109,40 @@ const filteredDepartments = computed(() => {
     }
     return null
   }
-  
-  // 构建可选项列表
+
+  // 构建可选项列表：优先显示自己部门，没有则显示全部部门
   const buildOptions = (): TagItem[] => {
     const options: TagItem[] = []
-    
-    // 1. 添加"全部部门"
-    const allDept = findDeptById(departments.value, ALL_DEPT_ID)
-    if (allDept) {
-      options.push(allDept)
-    }
-    
-    // 2. 如果用户有绑定部门，添加所属部门
+
     if (userDeptId !== null) {
+      // 用户有绑定部门，只显示所属部门
       const userDept = findDeptById(departments.value, userDeptId)
-      if (userDept && userDept.id !== ALL_DEPT_ID) {
+      if (userDept) {
         options.push(userDept)
       }
+    } else {
+      // 用户没有绑定部门，显示"全部部门"作为兜底
+      const allDept = findDeptById(departments.value, ALL_DEPT_ID)
+      if (allDept) {
+        options.push(allDept)
+      }
     }
-    
+
     return options
   }
-  
+
   const options = buildOptions()
+
+  // 如果只有一个选项，自动选中
+  if (options.length === 1 && form.value.departmentId !== options[0].id) {
+    form.value.departmentId = options[0].id
+  }
+
   return options
 })
+
+// 是否只有一个部门选项
+const hasSingleDeptOption = computed(() => filteredDepartments.value.length === 1)
 
 const isFetchingData = ref(false)
 
@@ -167,7 +188,7 @@ const fetchTags = async () => {
   try {
     // 使用Python后端API获取标签树，只获取个人标签
     const data = await getPythonTagsTree(true)
-    
+
     // 扁平化标签，只保留个人标签（type=2）
     const flattenTags = (nodes: TagNode[]): TagItem[] => {
       return nodes.reduce((acc: TagItem[], node) => {
@@ -177,6 +198,7 @@ const fetchTags = async () => {
             id: node.id,
             name: node.tag_name,
             parentId: node.parent_id,
+            departmentId: node.department_id,
             children: [],
             sortOrder: 0
           })
@@ -187,7 +209,7 @@ const fetchTags = async () => {
         return acc
       }, [])
     }
-    
+
     // 只显示个人标签
     const tags = flattenTags(data.personal_tags || [])
     cachedTags = tags
@@ -264,6 +286,7 @@ const createNewTag = async () => {
       id: result.tag_id,
       name: result.tag_name,
       parentId: 0,
+      departmentId: undefined, // 新创建的标签默认没有关联部门
       children: []
     }
 
@@ -360,6 +383,8 @@ watch(() => props.visible, (newVal) => {
 
     // 重置新创建标签记录
     newlyCreatedTagIds.value = []
+    // 重置标签公开选项为默认选中
+    makeSelectedTagsPublic.value = true
   }
 })
 
@@ -398,6 +423,14 @@ const handleSave = async () => {
 
   isSaving.value = true
   try {
+    // 如果没有会话ID但有提示词ID（临时会话场景），需要先创建会话
+    let sessionId = props.sessionId
+    if (!sessionId && props.promptId) {
+      const newSession = await createChatSession(form.value.title.trim())
+      sessionId = newSession.session_id
+      console.log(`[SavePromptModal] Created new session ${sessionId} for temp prompt ${props.promptId}`)
+    }
+
     // 构建保存请求 - 统一使用直接保存模式
     const saveData: any = {
       title: form.value.title.trim(),
@@ -406,13 +439,13 @@ const handleSave = async () => {
       tag_ids: form.value.tagIds || [],
       description: form.value.description || '',
       user_input_example: form.value.userInputExample || '',
-      finalize_session: false,  // 不收敛会话
+      finalize_session: !!sessionId,  // 有会话ID时收敛会话，设置origin_prompt_id
       content: props.promptContent  // 直接传递提示词内容
     }
 
     // 如果有会话ID，也传递过去（用于关联会话）
-    if (props.sessionId) {
-      saveData.session_id = props.sessionId
+    if (sessionId) {
+      saveData.session_id = sessionId
     }
     
     if (form.value.visibility === 'plaza' && form.value.departmentId !== null) {
@@ -426,19 +459,24 @@ const handleSave = async () => {
     // 调用Python后端API保存
     const result = await savePromptFromStudio(saveData)
 
-    // 如果保存的是公开提示词且有新创建的标签，更新标签的department_id
-    if (form.value.visibility === 'plaza' &&
-        form.value.departmentId !== null &&
-        newlyCreatedTagIds.value.length > 0) {
-      // 找出当前选中的标签中哪些是新创建的
+    // 如果保存的是公开提示词且用户选择将标签公开，则更新标签的department_id
+    if (form.value.visibility === 'plaza' && form.value.departmentId !== null && makeSelectedTagsPublic.value) {
+      // 收集需要公开化的标签ID：新创建的标签 + 选中的已存在私有标签
+      const tagsToMakePublic: number[] = []
+
+      // 1. 新创建的标签
       const selectedNewTagIds = form.value.tagIds.filter(tagId =>
         newlyCreatedTagIds.value.includes(tagId)
       )
+      tagsToMakePublic.push(...selectedNewTagIds)
 
-      if (selectedNewTagIds.length > 0) {
-        console.log(`[SavePromptModal] 更新 ${selectedNewTagIds.length} 个新标签的部门ID为 ${form.value.departmentId}`)
-        // 并行更新所有新创建标签的department_id
-        const updatePromises = selectedNewTagIds.map(tagId =>
+      // 2. 已存在的私有标签
+      tagsToMakePublic.push(...selectedPrivateTagIds.value)
+
+      if (tagsToMakePublic.length > 0) {
+        console.log(`[SavePromptModal] 用户选择公开，更新 ${tagsToMakePublic.length} 个标签的部门ID为 ${form.value.departmentId}`)
+        // 并行更新所有标签的department_id
+        const updatePromises = tagsToMakePublic.map(tagId =>
           updateTagDepartment(tagId, form.value.departmentId!)
             .catch(err => console.error(`[SavePromptModal] 更新标签 ${tagId} 部门失败:`, err))
         )
@@ -455,9 +493,10 @@ const handleSave = async () => {
     }
     toast(successMsg, 'success')
 
-    // 触发保存成功事件
+    // 触发保存成功事件，传递新创建的sessionId（如果有）
     emit('saved', {
       ...result,
+      session_id: sessionId,
       formData: form.value
     })
 
@@ -467,7 +506,7 @@ const handleSave = async () => {
     // 同时触发旧的save事件保持兼容性
     emit('save', {
       ...form.value,
-      sessionId: props.sessionId,
+      sessionId: sessionId,
       content: form.value.sourceType === 'prompt' ? props.promptContent : null,
       result
     })
@@ -582,13 +621,13 @@ const selectMessage = (id: number | string) => {
                 <!-- Search / Create Bar -->
                 <div class="tag-search-bar">
                   <Search :size="14" class="search-icon"/>
-                  <input 
-                    v-model="tagSearchQuery" 
-                    type="text" 
+                  <input
+                    v-model="tagSearchQuery"
+                    type="text"
                     placeholder="搜索或创建新标签..."
                     @keyup.enter="createNewTag"
                   >
-                  <button 
+                  <button
                     v-if="showCreateButton"
                     class="quick-create-btn"
                     @click="createNewTag"
@@ -598,7 +637,7 @@ const selectMessage = (id: number | string) => {
                     创建 "{{ tagSearchQuery }}"
                   </button>
                 </div>
-                
+
                 <!-- Available Tags List (Chips) -->
                 <div class="tags-cloud custom-scrollbar">
                   <div v-if="isFetchingData && allTags.length === 0" class="loading-tags">
@@ -606,14 +645,19 @@ const selectMessage = (id: number | string) => {
                     <span>加载标签中...</span>
                   </div>
                   <template v-else>
-                    <div 
-                      v-for="tag in filteredTags" 
+                    <div
+                      v-for="tag in filteredTags"
                       :key="tag.id"
                       class="tag-chip-option"
-                      :class="{ selected: form.tagIds.includes(tag.id as number) }"
+                      :class="{
+                        selected: form.tagIds.includes(tag.id as number),
+                        'is-public': tag.departmentId
+                      }"
                       @click="toggleTag(tag)"
                     >
-                      <span>{{ tag.name }}</span>
+                      <span class="tag-name">{{ tag.name }}</span>
+                      <span v-if="tag.departmentId" class="tag-status public">公开</span>
+                      <span v-else class="tag-status private">私有</span>
                       <CheckCircle2 v-if="form.tagIds.includes(tag.id as number)" :size="12" class="tag-check" />
                       <Plus v-else :size="12" class="tag-plus" />
                     </div>
@@ -621,6 +665,19 @@ const selectMessage = (id: number | string) => {
                       暂无标签
                     </div>
                   </template>
+                </div>
+
+                <!-- 标签公开选项：当有选中的私有标签时显示 -->
+                <div v-if="form.visibility === 'plaza' && selectedPrivateTagIds.length > 0" class="tag-public-option">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      v-model="makeSelectedTagsPublic"
+                      class="checkbox-input"
+                    >
+                    <span class="checkbox-text">将选中的 {{ selectedPrivateTagIds.length }} 个私有标签设为公开</span>
+                  </label>
+                  <span class="option-hint">公开后其他用户可在提示词广场看到此标签</span>
                 </div>
               </div>
             </div>
@@ -659,16 +716,21 @@ const selectMessage = (id: number | string) => {
             <Transition name="fade-height">
               <div v-if="form.visibility === 'plaza'" class="form-item">
                 <label class="form-label required">发布部门</label>
-                <div class="custom-tree-select" @click.stop>
-                  <div 
-                    class="select-trigger" 
+                <!-- 只有一个选项时显示为只读文本 -->
+                <div v-if="hasSingleDeptOption" class="single-dept-display">
+                  <span class="dept-text">{{ selectedDeptName }}</span>
+                </div>
+                <!-- 多个选项时显示下拉框 -->
+                <div v-else class="custom-tree-select" @click.stop>
+                  <div
+                    class="select-trigger"
                     :class="{ active: showDeptDropdown, placeholder: !form.departmentId }"
                     @click="toggleDeptDropdown"
                   >
                     <span>{{ selectedDeptName }}</span>
                     <ChevronDown class="trigger-icon" :size="16" />
                   </div>
-                  
+
                   <Transition name="dropdown-fade">
                     <div v-if="showDeptDropdown" class="tree-dropdown">
                       <div class="tree-content custom-scrollbar">
@@ -680,13 +742,13 @@ const selectMessage = (id: number | string) => {
                         <template v-for="dept in filteredDepartments" :key="dept.id">
                           <!-- Recursive tree rendering -->
                           <div class="dept-node">
-                            <div 
-                              class="dept-item" 
+                            <div
+                              class="dept-item"
                               :class="{ active: form.departmentId === dept.id, expanded: expandedDepts.includes(dept.id) }"
                               @click="selectDept(dept)"
                             >
-                              <div 
-                                class="expand-toggle" 
+                              <div
+                                class="expand-toggle"
                                 :class="{ hidden: !dept.children || dept.children.length === 0 }"
                                 @click.stop="toggleExpandDept(dept.id, $event)"
                               >
@@ -694,21 +756,21 @@ const selectMessage = (id: number | string) => {
                               </div>
                               <span class="dept-name">{{ dept.name }}</span>
                             </div>
-                            
+
                             <!-- Sub-departments (Recursion level 1) -->
                             <div v-if="expandedDepts.includes(dept.id) && dept.children && dept.children.length > 0" class="sub-depts">
-                              <div 
-                                v-for="child in dept.children" 
-                                :key="child.id" 
+                              <div
+                                v-for="child in dept.children"
+                                :key="child.id"
                                 class="dept-node"
                               >
-                                <div 
-                                  class="dept-item child-node" 
+                                <div
+                                  class="dept-item child-node"
                                   :class="{ active: form.departmentId === child.id, expanded: expandedDepts.includes(child.id) }"
                                   @click="selectDept(child)"
                                 >
-                                  <div 
-                                    class="expand-toggle" 
+                                  <div
+                                    class="expand-toggle"
                                     :class="{ hidden: !child.children || child.children.length === 0 }"
                                     @click.stop="toggleExpandDept(child.id, $event)"
                                   >
@@ -719,18 +781,18 @@ const selectMessage = (id: number | string) => {
 
                                 <!-- Grand-departments (Recursion level 2) -->
                                 <div v-if="expandedDepts.includes(child.id) && child.children && child.children.length > 0" class="sub-depts">
-                                  <div 
-                                    v-for="subChild in child.children" 
-                                    :key="subChild.id" 
+                                  <div
+                                    v-for="subChild in child.children"
+                                    :key="subChild.id"
                                     class="dept-node"
                                   >
-                                    <div 
+                                    <div
                                       class="dept-item grandchild-node"
                                       :class="{ active: form.departmentId === subChild.id, expanded: expandedDepts.includes(subChild.id) }"
                                       @click="selectDept(subChild)"
                                     >
-                                      <div 
-                                        class="expand-toggle" 
+                                      <div
+                                        class="expand-toggle"
                                         :class="{ hidden: !subChild.children || subChild.children.length === 0 }"
                                         @click.stop="toggleExpandDept(subChild.id, $event)"
                                       >
@@ -738,12 +800,12 @@ const selectMessage = (id: number | string) => {
                                       </div>
                                       <span class="dept-name">{{ subChild.name }}</span>
                                     </div>
-                                    
+
                                     <!-- Level 3 (Rare, but supported) -->
                                     <div v-if="expandedDepts.includes(subChild.id) && subChild.children && subChild.children.length > 0" class="sub-depts">
-                                      <div 
-                                        v-for="subSubChild in subChild.children" 
-                                        :key="subSubChild.id" 
+                                      <div
+                                        v-for="subSubChild in subChild.children"
+                                        :key="subSubChild.id"
                                         class="dept-item level3-node"
                                         :class="{ active: form.departmentId === subSubChild.id }"
                                         @click="selectDept(subSubChild)"
@@ -1240,6 +1302,43 @@ const selectMessage = (id: number | string) => {
   color: var(--text-secondary);
 }
 
+/* 标签状态样式 */
+.tag-chip-option .tag-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-chip-option .tag-status {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 100px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.tag-chip-option .tag-status.public {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.tag-chip-option .tag-status.private {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+.tag-chip-option.selected .tag-status.public {
+  background: rgba(34, 197, 94, 0.25);
+  color: #15803d;
+}
+
+.tag-chip-option.selected .tag-status.private {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--primary);
+}
+
 .no-tags-hint {
   width: 100%;
   text-align: center;
@@ -1247,6 +1346,45 @@ const selectMessage = (id: number | string) => {
   color: var(--text-tertiary);
   font-size: 12px;
   font-style: italic;
+}
+
+/* 标签公开选项样式 */
+.tag-public-option {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checkbox-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.option-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: 24px;
+  line-height: 1.4;
 }
 
 .ml-auto {
@@ -1324,6 +1462,25 @@ const selectMessage = (id: number | string) => {
 .custom-tree-select {
   position: relative;
   width: 100%;
+}
+
+/* 单个部门只读显示样式 */
+.single-dept-display {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+.single-dept-display .dept-text {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .select-trigger {

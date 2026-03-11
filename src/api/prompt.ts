@@ -56,11 +56,14 @@ export function toggleLike(id: number) {
   })
 }
 
-export function batchSharePrompts(ids: number[]) {
+export function batchSharePrompts(ids: number[], departmentId?: number) {
   return request<any, void>({
     url: '/java/v1/prompts/batch-share',
     method: 'post',
-    data: ids
+    data: {
+      ids,
+      departmentId
+    }
   })
 }
 

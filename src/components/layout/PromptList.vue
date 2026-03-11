@@ -7,7 +7,7 @@ import CopyButton from '@/components/common/CopyButton.vue'
 import PromptDetailModal from '@/components/common/PromptDetailModal.vue'
 import PromptSkeleton from '@/components/ui/Skeleton/PromptSkeleton.vue'
 import { getPrompts, toggleFavorite, toggleLike, getPromptDetail, batchSharePrompts, batchUnsharePrompts } from '@/api/prompt'
-import { deletePrompt, addTagToPrompt, getPromptSession, removeTagFromPrompt, getPythonTagsTree } from '@/api/promptSave'
+import { deletePrompt, addTagToPrompt, getPromptSession, removeTagFromPrompt, getPythonTagsTree, getPythonDepartmentsTree } from '@/api/promptSave'
 import { useToast } from '@/composables/useToast'
 import { useUserStore } from '@/stores/user'
 import { useChatStore } from '@/stores/chat'
@@ -23,6 +23,7 @@ const props = defineProps<{
   search?: string
   hideToolbar?: boolean
   showQuoteAction?: boolean
+  isMyPrompts?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -77,6 +78,10 @@ const deleteWithSession = ref(false)
 // 分享确认弹窗
 const showShareConfirmModal = ref(false)
 const promptToShare = ref<PromptItem | null>(null)
+const shareScope = ref<'all' | 'department'>('all')
+const departments = ref<any[]>([])
+const selectedDepartment = ref<number | null>(null)
+const loadingDepartments = ref(false)
 
 // 当前用户ID
 const currentUserId = computed(() => userStore.userInfo?.id || null)
@@ -119,12 +124,12 @@ const deleteSelectedPrompts = async (deleteWithSession = false): Promise<number[
   return deletedIds
 }
 
-const shareSelectedPrompts = async (): Promise<number[]> => {
+const shareSelectedPrompts = async (deptId?: number): Promise<number[]> => {
   const idsToShare = Array.from(selectedPrompts.value)
   if (idsToShare.length === 0) return []
-  
+
   try {
-    await batchSharePrompts(idsToShare)
+    await batchSharePrompts(idsToShare, deptId)
     
     // 清空选择
     selectedPrompts.value.clear()
@@ -348,24 +353,93 @@ const executeDeletePrompt = async () => {
 }
 
 // 打开分享确认弹窗
-const openShareConfirm = (prompt: PromptItem) => {
+const openShareConfirm = async (prompt: PromptItem) => {
   closeSettingsMenu()
   promptToShare.value = prompt
+  shareScope.value = 'all'
+  selectedDepartment.value = null
   showShareConfirmModal.value = true
+
+  // 加载部门列表（只显示全部部门和用户自己的部门）
+  loadingDepartments.value = true
+  try {
+    const depts = await getPythonDepartmentsTree()
+    departments.value = filterDepartmentsForShare(depts)
+  } catch (error) {
+    console.error('Failed to load departments:', error)
+  } finally {
+    loadingDepartments.value = false
+  }
+}
+
+// 过滤部门：只显示全部部门(ID=1)和用户自己的部门
+const filterDepartmentsForShare = (nodes: any[]): any[] => {
+  const ALL_DEPT_ID = 1 // "全部部门"在数据库中的ID
+  const userDeptId = userStore.userInfo?.departmentId ?? userStore.userInfo?.department_id ?? null
+
+  // 从树中查找指定ID的部门
+  const findDeptById = (nodes: any[], targetId: number): any | null => {
+    for (const node of nodes) {
+      const nodeId = node.id ?? node.department_id
+      if (nodeId === targetId) {
+        return node
+      }
+      if (node.children && node.children.length > 0) {
+        const found = findDeptById(node.children, targetId)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const result: any[] = []
+
+  // 1. 添加"全部部门"
+  const allDept = findDeptById(nodes, ALL_DEPT_ID)
+  if (allDept) {
+    result.push({
+      ...allDept,
+      displayName: allDept.name || allDept.department_name || '全部部门'
+    })
+  }
+
+  // 2. 如果用户有绑定部门且不是全部部门，添加所属部门
+  if (userDeptId !== null && userDeptId !== ALL_DEPT_ID) {
+    const userDept = findDeptById(nodes, userDeptId)
+    if (userDept) {
+      result.push({
+        ...userDept,
+        displayName: userDept.name || userDept.department_name || '我的部门'
+      })
+    }
+  }
+
+  return result
 }
 
 // 关闭分享确认弹窗
 const closeShareConfirm = () => {
   showShareConfirmModal.value = false
   promptToShare.value = null
+  shareScope.value = 'all'
+  selectedDepartment.value = null
+  departments.value = []
 }
 
 // 执行分享
 const executeSharePrompt = async () => {
   if (!promptToShare.value) return
 
+  // 如果选择了指定部门但没有选部门，提示错误
+  if (shareScope.value === 'department' && !selectedDepartment.value) {
+    toast('请选择要分享的部门', 'warning')
+    return
+  }
+
   try {
-    await batchSharePrompts([promptToShare.value.id])
+    // 调用分享API，传入部门ID（如果选择了指定部门）
+    const deptId = shareScope.value === 'department' ? selectedDepartment.value : undefined
+    await batchSharePrompts([promptToShare.value.id], deptId)
     toast('分享成功', 'success')
     emit('promptsShared', [promptToShare.value.id])
     // 刷新列表
@@ -954,13 +1028,13 @@ onBeforeUnmount(() => {
                       <button 
                         class="action-btn-with-stat" 
                         :class="{ 
-                          'liked': prompt.isLiked,
+                          'liked': prompt.isLiked && !isMyPrompts,
                           'no-interact': filter !== 'plaza' 
                         }" 
                         :title="filter === 'plaza' ? '点赞' : '点赞数'" 
                         @click.stop="filter === 'plaza' ? handleToggleLike(prompt) : null"
                       >
-                        <ThumbsUp :size="16" :fill="prompt.isLiked ? 'currentColor' : 'none'" />
+                        <ThumbsUp :size="16" :fill="(prompt.isLiked && !isMyPrompts) ? 'currentColor' : 'none'" />
                         <span class="stat-num">{{ prompt.stats.likes || 0 }}</span>
                       </button>
 
@@ -1033,18 +1107,31 @@ onBeforeUnmount(() => {
                 </div>
                 
                 <div class="metrics" v-if="filter !== 'plaza'">
-                  <div class="metric" title="浏览量">
-                    <Eye :size="14" />
-                    <span>{{ prompt.stats.views }}</span>
-                  </div>
-                  <div class="metric" title="点赞数">
-                    <ThumbsUp :size="14" />
-                    <span>{{ prompt.stats.likes || 0 }}</span>
-                  </div>
-                  <div class="metric" title="收藏数">
-                    <Heart :size="14" />
-                    <span>{{ prompt.stats.favorites || 0 }}</span>
-                  </div>
+                  <!-- MyPrompts 页面只显示分享按钮 -->
+                  <template v-if="isMyPrompts && isOwnPrompt(prompt)">
+                    <button 
+                      class="share-btn-small" 
+                      title="分享"
+                      @click.stop="openShareConfirm(prompt)"
+                    >
+                      <Share2 :size="14" />
+                      <span>分享</span>
+                    </button>
+                  </template>
+                  <template v-else>
+                    <div class="metric" title="浏览量">
+                      <Eye :size="14" />
+                      <span>{{ prompt.stats.views }}</span>
+                    </div>
+                    <div class="metric" title="点赞数">
+                      <ThumbsUp :size="14" />
+                      <span>{{ prompt.stats.likes || 0 }}</span>
+                    </div>
+                    <div class="metric" title="收藏数">
+                      <Heart :size="14" />
+                      <span>{{ prompt.stats.favorites || 0 }}</span>
+                    </div>
+                  </template>
                 </div>
               </div>
 
@@ -1178,22 +1265,64 @@ onBeforeUnmount(() => {
 
     <!-- 分享确认弹窗 -->
     <div v-if="showShareConfirmModal" class="modal-overlay" @click.self="closeShareConfirm">
-      <div class="modal-content">
+      <div class="modal-content share-modal">
         <div class="modal-header">
           <Share2 class="primary-icon" :size="24" />
-          <h3>确认分享</h3>
+          <h3>分享提示词</h3>
         </div>
         <div class="modal-body">
-          <p>确定要分享提示词「<strong>{{ promptToShare?.title }}</strong>」到提示词广场吗？</p>
-          <p class="text-secondary">
-            分享后，提示词将公开可见，并根据您的部门设置自动分类。
-            <br>
-            如果没有绑定部门，将分享到公共区域。
-          </p>
+          <p>分享提示词「<strong>{{ promptToShare?.title }}</strong>」到：</p>
+          
+          <!-- 分享范围选择 -->
+          <div class="share-scope-section">
+            <div class="scope-options">
+              <label class="scope-option" :class="{ active: shareScope === 'all' }">
+                <input type="radio" v-model="shareScope" value="all" />
+                <div class="scope-content">
+                  <span class="scope-title">全部部门</span>
+                  <span class="scope-desc">所有用户都可以在提示词广场看到</span>
+                </div>
+              </label>
+              <label class="scope-option" :class="{ active: shareScope === 'department' }">
+                <input type="radio" v-model="shareScope" value="department" />
+                <div class="scope-content">
+                  <span class="scope-title">指定部门</span>
+                  <span class="scope-desc">仅分享给选定部门的用户</span>
+                </div>
+              </label>
+            </div>
+            
+            <!-- 部门选择器 -->
+            <div v-if="shareScope === 'department'" class="department-select-wrapper">
+              <div v-if="loadingDepartments" class="loading-departments">加载部门中...</div>
+              <div v-else-if="departments.length === 0" class="empty-departments">暂无可用部门</div>
+              <div v-else class="department-list">
+                <label 
+                  v-for="dept in departments" 
+                  :key="dept.department_id || dept.id" 
+                  class="department-option"
+                  :class="{ active: selectedDepartment === (dept.department_id || dept.id) }"
+                >
+                  <input 
+                    type="radio" 
+                    v-model="selectedDepartment" 
+                    :value="dept.department_id || dept.id" 
+                  />
+                  <span class="dept-name">{{ dept.department_name || dept.name }}</span>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn-secondary" @click="closeShareConfirm">取消</button>
-          <button class="btn-primary" @click="executeSharePrompt">确认分享</button>
+          <button 
+            class="btn-primary" 
+            @click="executeSharePrompt"
+            :disabled="shareScope === 'department' && !selectedDepartment"
+          >
+            确认分享
+          </button>
         </div>
       </div>
     </div>
@@ -1613,6 +1742,9 @@ onBeforeUnmount(() => {
   flex: 1;
   margin-bottom: 16px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .prompt-title {
@@ -1707,6 +1839,8 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--bg-primary);
   font-size: 12px;
   color: var(--text-tertiary);
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .author-info {
@@ -1749,6 +1883,25 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.share-btn-small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.share-btn-small:hover {
+  background: var(--primary);
+  color: white;
 }
 
 .action-btn-with-stat {
@@ -2241,5 +2394,123 @@ onBeforeUnmount(() => {
 .settings-btn:hover {
   color: var(--primary);
   background: var(--bg-secondary);
+}
+
+/* Share Modal Styles */
+.share-modal {
+  max-width: 480px;
+  width: 90vw;
+}
+
+.share-scope-section {
+  margin-top: 20px;
+}
+
+.scope-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-primary);
+}
+
+.scope-option:hover {
+  border-color: var(--primary-light);
+}
+
+.scope-option.active {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.05);
+}
+
+.scope-option input[type="radio"] {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.scope-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scope-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.scope-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.department-select-wrapper {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.loading-departments,
+.empty-departments {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.department-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.department-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-primary);
+  border: 1px solid transparent;
+}
+
+.department-option:hover {
+  border-color: var(--primary-light);
+}
+
+.department-option.active {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.08);
+}
+
+.department-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.dept-name {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: monospace;
+  white-space: pre;
 }
 </style>

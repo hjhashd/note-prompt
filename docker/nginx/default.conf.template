@@ -1,5 +1,5 @@
 server {
-    listen 80;
+    listen ${NGINX_LISTEN_PORT};
     server_name localhost;
 
     # 增加解析器，防止后端容器未启动时 Nginx 启动失败
@@ -22,6 +22,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
+        # 代理超时配置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
         # 支持 SSE 流式传输
         proxy_http_version 1.1;
         proxy_set_header Connection "";
@@ -41,6 +46,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 代理超时配置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
         rewrite ^/api/java/(.*)$ /api/$1 break;
     }
 

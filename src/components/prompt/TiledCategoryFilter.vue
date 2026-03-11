@@ -61,11 +61,13 @@ const updateChildTags = () => {
     // When a department is selected, only show personal tags under this department
     // Don't show child departments (they are already shown in the left sidebar)
     const descendantIds = getDescendantIds(fullTree.value, props.parentId)
+    console.log('[TiledCategoryFilter] parentId:', props.parentId, 'descendantIds:', descendantIds, 'totalTags:', personalTags.value.length)
 
     // Only show personal tags that have department_id matching any descendant
     const matchingPersonalTags = personalTags.value.filter(
       tag => tag.departmentId && descendantIds.includes(tag.departmentId)
     )
+    console.log('[TiledCategoryFilter] matching tags:', matchingPersonalTags.length)
     sourceNodes = [...matchingPersonalTags]
   } else {
     // When "All Departments" is selected (parentId is null), show all personal tags
@@ -103,16 +105,15 @@ const fetchTags = async () => {
     } else {
       // For public tags, fetch department tree from Java backend
       const data = await getTagsTree()
-      // Align with TagDirectory: Unwrap if there's a single root with children
-      let roots = data
-      if (data && data.length > 0 && data[0].children) {
-        roots = data[0].children
-      }
-      fullTree.value = roots
+      // Keep full tree for descendant lookup, but also unwrap for display if needed
+      // Store the complete tree structure for proper descendant ID lookup
+      fullTree.value = data || []
+      console.log('[TiledCategoryFilter] Department tree loaded:', fullTree.value)
 
       // Also fetch personal tags from Python backend (to get type=2 tags with department_id)
+      // For public plaza, include_all_public=true to get all tags with department_id
       try {
-        const pythonData = await getPythonTagsTree(true)
+        const pythonData = await getPythonTagsTree(true, true)
         // Flatten personal tags and convert to TagItem format
         const flattenTags = (nodes: any[]): TagItem[] => {
           return nodes.reduce((acc: TagItem[], node) => {
@@ -130,10 +131,11 @@ const fetchTags = async () => {
             return acc
           }, [])
         }
-        personalTags.value = flattenTags(pythonData.personal_tags || [])
-        console.log('[TiledCategoryFilter] Personal tags loaded:', personalTags.value)
+        // Use public_tags for plaza (all tags with department_id)
+        personalTags.value = flattenTags(pythonData.public_tags || [])
+        console.log('[TiledCategoryFilter] Public tags loaded:', personalTags.value)
       } catch (err) {
-        console.error('[TiledCategoryFilter] Failed to fetch personal tags:', err)
+        console.error('[TiledCategoryFilter] Failed to fetch public tags:', err)
       }
     }
 

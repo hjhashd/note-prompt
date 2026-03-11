@@ -170,13 +170,18 @@ export function createPersonalTag(data: CreateTagRequest): Promise<{ tag_id: num
 }
 
 /**
- * 获取标签树（系统标签 + 个人标签）
+ * 获取标签树（系统标签 + 个人标签 + 公开标签）
+ * @param include_personal 是否包含当前用户创建的个人标签
+ * @param include_all_public 是否包含所有已关联部门的公开标签（用于提示词广场）
  */
-export function getPythonTagsTree(include_personal = true): Promise<{ system_tags: TagNode[]; personal_tags: TagNode[] }> {
-  return request<any, { system_tags: TagNode[]; personal_tags: TagNode[] }>({
+export function getPythonTagsTree(
+  include_personal = true,
+  include_all_public = false
+): Promise<{ system_tags: TagNode[]; personal_tags: TagNode[]; public_tags: TagNode[] }> {
+  return request<any, { system_tags: TagNode[]; personal_tags: TagNode[]; public_tags: TagNode[] }>({
     url: '/python/ai/prompts/tags/tree',
     method: 'get',
-    params: { include_personal }
+    params: { include_personal, include_all_public }
   })
 }
 

@@ -47,6 +47,12 @@ const router = createRouter({
       component: () => import('../views/LoginView.vue'),
       meta: { guest: true, hideSidebar: true }
     },
+    {
+      path: '/change-password',
+      name: 'change-password',
+      component: () => import('../views/ChangePasswordView.vue'),
+      meta: { guest: true, hideSidebar: true }
+    },
     /* {
       path: '/register',
       name: 'register',

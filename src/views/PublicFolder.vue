@@ -75,6 +75,8 @@ const sortMap: Record<string, string> = {
 onMounted(restoreScroll)
 onActivated(() => {
   restoreScroll()
+  // 每次激活页面时刷新列表（处理取消分享后需要刷新的情况）
+  promptListRef.value?.fetchPromptsList()
 })
 onBeforeRouteLeave(() => {
   saveScroll()

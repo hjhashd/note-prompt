@@ -38,3 +38,16 @@ export function register(data: RegisterData): Promise<RegisterResponse> {
     data
   }) as any
 }
+
+export function changePassword(data: {
+  username: string
+  oldPassword: string
+  newPassword: string
+  confirmPassword: string
+}) {
+  return request({
+    url: '/java/auth/change-password',
+    method: 'post',
+    data
+  })
+}

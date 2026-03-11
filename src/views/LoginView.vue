@@ -28,7 +28,7 @@
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
         <div class="space-y-4">
           <div class="input-group">
-            <label for="username" class="block text-sm font-semibold text-gray-700 mb-1 ml-1">用户名</label>
+            <label for="username" class="block text-sm font-semibold text-gray-700 mb-1 ml-1">用户名 / 真实姓名</label>
             <div class="relative">
               <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -42,7 +42,7 @@
                 required
                 v-model="loginForm.username"
                 class="block w-full pl-10 pr-3 py-3 border border-gray-200 rounded-xl leading-5 bg-white/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 sm:text-sm"
-                placeholder="请输入用户名"
+                placeholder="请输入用户名或真实姓名"
               />
             </div>
           </div>
@@ -74,7 +74,9 @@
             <label for="remember-me" class="ml-2 block text-sm text-gray-600"> 记住我 </label>
           </div>
           <div class="text-sm">
-            <a href="#" class="font-medium text-blue-600 hover:text-blue-500 transition-colors"> 忘记密码？ </a>
+            <router-link to="/change-password" class="font-medium text-blue-600 hover:text-blue-500 transition-colors">
+              修改密码
+            </router-link>
           </div>
         </div>
 

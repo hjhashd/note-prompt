@@ -148,6 +148,31 @@ const handleSelectTag = async (tagId: number | null) => {
 const handleSelectPrompt = (prompt: PromptItem) => {
   emit('select-prompt', prompt)
 }
+
+// Tooltip logic
+const tooltip = ref({
+  visible: false,
+  text: '',
+  x: 0,
+  y: 0
+})
+
+const showTooltip = (e: MouseEvent, text: string) => {
+  if (!text) return
+  const target = e.currentTarget as HTMLElement
+  const rect = target.getBoundingClientRect()
+  
+  tooltip.value = {
+    visible: true,
+    text,
+    x: rect.left + 20,
+    y: rect.bottom + 5
+  }
+}
+
+const hideTooltip = () => {
+  tooltip.value.visible = false
+}
 </script>
 
 <template>
@@ -187,7 +212,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
               @click="handleSelectPrompt(prompt)"
             >
               <div class="prompt-card-header">
-                <div class="prompt-card-title">
+                <div 
+                  class="prompt-card-title"
+                  @mouseenter="showTooltip($event, prompt.title)"
+                  @mouseleave="hideTooltip"
+                >
                   <Sparkles :size="16" class="prompt-card-icon" />
                   <span class="text-truncate">{{ prompt.title }}</span>
                 </div>
@@ -235,7 +264,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
                 :class="{ 'is-own': tempSession.isOwnPrompt, 'is-ref': !tempSession.isOwnPrompt }"
               >
                 <div class="prompt-card-header">
-                  <div class="prompt-card-title">
+                  <div 
+                    class="prompt-card-title"
+                    @mouseenter="showTooltip($event, tempSession.title)"
+                    @mouseleave="hideTooltip"
+                  >
                     <component 
                       :is="tempSession.isOwnPrompt ? Sparkles : Link" 
                       :size="15" 
@@ -258,7 +291,7 @@ const handleSelectPrompt = (prompt: PromptItem) => {
             >
               <div class="subtitle-content">
                 <BookmarkCheck :size="13" class="subtitle-icon" />
-                <span>已保存的提示词</span>
+                <span>已保存的提示词记录</span>
               </div>
               <ChevronRight 
                 :size="13" 
@@ -275,7 +308,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
                 @click="handleSwitchSession(session.session_id)"
               >
                 <div class="prompt-card-header">
-                  <div class="prompt-card-title">
+                  <div 
+                    class="prompt-card-title"
+                    @mouseenter="showTooltip($event, session.title || '新对话')"
+                    @mouseleave="hideTooltip"
+                  >
                     <Sparkles :size="15" class="prompt-card-icon saved-icon" />
                     <span class="text-truncate">{{ session.title || '新对话' }}</span>
                   </div>
@@ -317,7 +354,11 @@ const handleSelectPrompt = (prompt: PromptItem) => {
                 @click="handleSwitchSession(session.session_id)"
               >
                 <div class="prompt-card-header">
-                  <div class="prompt-card-title">
+                  <div 
+                    class="prompt-card-title"
+                    @mouseenter="showTooltip($event, session.title || '新对话')"
+                    @mouseleave="hideTooltip"
+                  >
                     <MessageSquare :size="15" class="prompt-card-icon" />
                     <span class="text-truncate">{{ session.title || '新对话' }}</span>
                   </div>
@@ -418,6 +459,18 @@ const handleSelectPrompt = (prompt: PromptItem) => {
       @close="showRenameModal = false"
       @confirm="confirmRenameSession"
     />
+
+    <Teleport to="body">
+      <Transition name="tooltip">
+        <div 
+          v-if="tooltip.visible"
+          class="sidebar-tooltip"
+          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+        >
+          {{ tooltip.text }}
+        </div>
+      </Transition>
+    </Teleport>
   </aside>
 </template>
 
@@ -914,5 +967,34 @@ const handleSelectPrompt = (prompt: PromptItem) => {
 
 .all-icon {
   color: var(--primary);
+}
+
+/* Tooltip */
+.sidebar-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-surface, #fff);
+  color: var(--text-primary, #333);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-subtle, #eee);
+  max-width: 300px;
+  word-wrap: break-word;
+  pointer-events: none;
+  transform-origin: top left;
+}
+
+.tooltip-enter-active,
+.tooltip-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.tooltip-enter-from,
+.tooltip-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.98);
 }
 </style>
