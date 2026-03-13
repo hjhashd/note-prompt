@@ -491,6 +491,13 @@ const sendMessage = async () => {
       // Update session ID in store (loadSessions will be called at the end of stream)
       chatStore.currentSessionId = sid
 
+      // Add session to store immediately to update sidebar
+      chatStore.addSession({
+        session_id: sid,
+        title: '新对话',
+        update_time: new Date().toISOString()
+      })
+
       // 清除临时会话状态
       chatStore.clearTempSession()
 
@@ -512,25 +519,30 @@ const sendMessage = async () => {
 
           // Auto-generate title for the first message
           if (isFirstMessage && currentSessionId.value) {
+            const sid = currentSessionId.value
             try {
+              chatStore.setSessionGeneratingTitle(sid, true)
               // Use user prompt + AI response as context (limit length to avoid huge payload)
               const aiContent = msg ? msg.content : ''
               const context = `User: ${prompt}\nAI: ${aiContent}`.slice(0, 2000)
 
-              const res = await autoGenerateTitle(currentSessionId.value, context)
+              const res = await autoGenerateTitle(sid, context)
               if (res.ok && res.new_title) {
                 // Update local title
                 emit('update:title', res.new_title)
+                chatStore.updateSessionTitle(sid, res.new_title)
               }
             } catch (e) {
               console.warn('Failed to auto-generate title:', e)
+            } finally {
+              chatStore.setSessionGeneratingTitle(sid, false)
             }
           }
-          // Reload sessions to update title and update_time
-          await chatStore.loadSessions()
+          
+          // Removed await chatStore.loadSessions() to avoid flickering
 
           if (currentSessionId.value) {
-            await chatStore.loadSessionHistory(currentSessionId.value)
+            // Only ensure ref prompt card, skip history reload to avoid jump
             await ensureRefPromptCard(currentSessionId.value)
           }
         } else {

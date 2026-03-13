@@ -291,8 +291,8 @@ export function deletePublicTag(tag_id: number, delete_prompts = false): Promise
  * @param tag_id 标签ID
  * @param department_id 部门ID
  */
-export function updateTagDepartment(tag_id: number, department_id: number): Promise<{ code: number; message: string; data?: { tag_id: number; department_id: number } }> {
-  return request<any, { code: number; message: string; data?: { tag_id: number; department_id: number } }>({
+export function updateTagDepartment(tag_id: number, department_id: number): Promise<{ code: number; message: string; data?: { tag_id: number; department_id: number; affected_prompts?: number } }> {
+  return request<any, { code: number; message: string; data?: { tag_id: number; department_id: number; affected_prompts?: number } }>({
     url: `/python/ai/prompts/tags/${tag_id}/department`,
     method: 'put',
     data: { department_id }

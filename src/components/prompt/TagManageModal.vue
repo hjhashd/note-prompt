@@ -46,14 +46,10 @@ const tagToDelete = ref<TagNode | null>(null)
 const deleteWithPrompts = ref(false)
 const isDeleting = ref(false)
 
-// 分配部门
-const showAssignDeptModal = ref(false)
-const tagToAssign = ref<TagNode | null>(null)
-const selectedDeptId = ref<number | null>(null)
-const isAssigning = ref(false)
-
-// 全部部门ID（假设为1）
-const ALL_DEPT_ID = 1
+// 公开/私有切换
+const showVisibilityModal = ref(false)
+const tagToToggle = ref<TagNode | null>(null)
+const isToggling = ref(false)
 
 // 计算当前用户的部门名称
 const userDeptName = computed(() => {
@@ -72,23 +68,9 @@ const userDeptName = computed(() => {
   return dept?.name || '我的部门'
 })
 
-// 获取标签所属部门名称
-const getTagDeptName = (tag: TagNode): string => {
-  if (!tag.department_id) return '全部部门'
-  if (tag.department_id === ALL_DEPT_ID) return '全部部门'
-
-  const findDept = (nodes: DepartmentNode[]): DepartmentNode | null => {
-    for (const node of nodes) {
-      if (node.id === tag.department_id) return node
-      if (node.children) {
-        const found = findDept(node.children)
-        if (found) return found
-      }
-    }
-    return null
-  }
-  const dept = findDept(departments.value)
-  return dept?.name || '全部部门'
+// 判断标签是否公开
+const isTagPublic = (tag: TagNode): boolean => {
+  return !!tag.department_id
 }
 
 // 加载数据
@@ -217,34 +199,42 @@ const executeDelete = async () => {
   }
 }
 
-// 打开分配部门弹窗
-const openAssignDept = (tag: TagNode) => {
-  tagToAssign.value = tag
-  selectedDeptId.value = tag.department_id || ALL_DEPT_ID
-  showAssignDeptModal.value = true
+// 打开公开/私有切换弹窗
+const openVisibilityToggle = (tag: TagNode) => {
+  tagToToggle.value = tag
+  showVisibilityModal.value = true
 }
 
-// 关闭分配部门弹窗
-const closeAssignDept = () => {
-  showAssignDeptModal.value = false
-  tagToAssign.value = null
-  selectedDeptId.value = null
+// 关闭公开/私有切换弹窗
+const closeVisibilityToggle = () => {
+  showVisibilityModal.value = false
+  tagToToggle.value = null
 }
 
-// 执行分配部门
-const executeAssignDept = async () => {
-  if (!tagToAssign.value || selectedDeptId.value === null) return
+// 执行公开/私有切换
+const executeVisibilityToggle = async () => {
+  if (!tagToToggle.value) return
 
-  isAssigning.value = true
+  const isPublic = isTagPublic(tagToToggle.value)
+  const newDeptId = isPublic ? 0 : (props.userDepartmentId || 0)
+
+  isToggling.value = true
   try {
-    await updateTagDepartment(tagToAssign.value.id, selectedDeptId.value)
-    toast('部门分配成功', 'success')
-    closeAssignDept()
+    const res = await updateTagDepartment(tagToToggle.value.id, newDeptId)
+    const affectedPrompts = res.data?.affected_prompts || 0
+
+    if (isPublic && affectedPrompts > 0) {
+      toast(`标签已设为私有，同时已将 ${affectedPrompts} 个关联的公开提示词设为私有`, 'success')
+    } else {
+      toast(isPublic ? '标签已设为私有' : '标签已设为公开', 'success')
+    }
+
+    closeVisibilityToggle()
     await loadData()
   } catch (error: any) {
-    toast(error?.response?.data?.message || '分配部门失败', 'error')
+    toast(error?.response?.data?.message || '设置失败', 'error')
   } finally {
-    isAssigning.value = false
+    isToggling.value = false
   }
 }
 
@@ -350,10 +340,10 @@ onMounted(() => {
                 <template v-else>
                   <span class="tag-name">{{ tag.tag_name }}</span>
                   <div class="tag-meta">
-                    <span class="dept-badge" :class="{ 'all-dept': !tag.department_id || tag.department_id === ALL_DEPT_ID }">
-                      <Globe v-if="!tag.department_id || tag.department_id === ALL_DEPT_ID" :size="12" />
+                    <span class="visibility-badge" :class="{ 'is-public': isTagPublic(tag) }">
+                      <Globe v-if="isTagPublic(tag)" :size="12" />
                       <FolderOpen v-else :size="12" />
-                      {{ getTagDeptName(tag) }}
+                      {{ isTagPublic(tag) ? '公开' : '私有' }}
                     </span>
                   </div>
                 </template>
@@ -362,10 +352,11 @@ onMounted(() => {
               <div v-if="editingTag?.id !== tag.id" class="tag-actions">
                 <button
                   class="icon-btn"
-                  title="分配部门"
-                  @click="openAssignDept(tag)"
+                  :title="isTagPublic(tag) ? '设为私有' : '设为公开'"
+                  @click="openVisibilityToggle(tag)"
                 >
-                  <FolderOpen :size="16" />
+                  <Globe v-if="!isTagPublic(tag)" :size="16" />
+                  <FolderOpen v-else :size="16" />
                 </button>
                 <button
                   class="icon-btn"
@@ -386,29 +377,22 @@ onMounted(() => {
           </div>
         </div>
 
-        <!-- 部门说明 -->
+        <!-- 可见性说明 -->
         <div class="dept-info">
-          <h4>部门说明</h4>
+          <h4>可见性说明</h4>
           <div class="dept-options">
             <div class="dept-option">
               <Globe :size="16" />
               <div>
-                <span class="option-title">全部部门</span>
-                <span class="option-desc">标签将显示在所有部门中</span>
+                <span class="option-title">公开标签</span>
+                <span class="option-desc">标签将在提示词广场公开显示</span>
               </div>
             </div>
-            <div v-if="userDeptName" class="dept-option">
+            <div class="dept-option">
               <FolderOpen :size="16" />
               <div>
-                <span class="option-title">{{ userDeptName }}</span>
-                <span class="option-desc">标签只显示在您的部门中</span>
-              </div>
-            </div>
-            <div v-else class="dept-option disabled">
-              <FolderOpen :size="16" />
-              <div>
-                <span class="option-title">所属部门</span>
-                <span class="option-desc">您尚未绑定部门，公开标签只能放到全部部门</span>
+                <span class="option-title">私有标签</span>
+                <span class="option-desc">标签仅自己可见</span>
               </div>
             </div>
           </div>
@@ -467,61 +451,34 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 分配部门弹窗 -->
-    <div v-if="showAssignDeptModal" class="confirm-overlay" @click.self="closeAssignDept">
+    <!-- 公开/私有切换弹窗 -->
+    <div v-if="showVisibilityModal" class="confirm-overlay" @click.self="closeVisibilityToggle">
       <div class="confirm-modal">
         <div class="confirm-header">
-          <FolderOpen class="primary-icon" :size="24" />
-          <h4>分配部门</h4>
+          <component :is="isTagPublic(tagToToggle!) ? FolderOpen : Globe" class="primary-icon" :size="24" />
+          <h4>{{ isTagPublic(tagToToggle!) ? '设为私有' : '设为公开' }}</h4>
         </div>
         <div class="confirm-body">
-          <p>选择标签「<strong>{{ tagToAssign?.tag_name }}</strong>」所属的部门：</p>
-
-          <div class="dept-options-list">
-            <label class="dept-radio">
-              <input
-                type="radio"
-                v-model="selectedDeptId"
-                :value="ALL_DEPT_ID"
-              />
-              <div class="dept-radio-content">
-                <Globe :size="18" />
-                <div>
-                  <span class="dept-name">全部部门</span>
-                  <span class="dept-desc">标签将显示在所有部门中</span>
-                </div>
-              </div>
-            </label>
-
-            <label
-              v-if="props.userDepartmentId"
-              class="dept-radio"
-            >
-              <input
-                type="radio"
-                v-model="selectedDeptId"
-                :value="props.userDepartmentId"
-              />
-              <div class="dept-radio-content">
-                <FolderOpen :size="18" />
-                <div>
-                  <span class="dept-name">{{ userDeptName }}</span>
-                  <span class="dept-desc">标签只显示在您的部门中</span>
-                </div>
-              </div>
-            </label>
-          </div>
+          <p v-if="isTagPublic(tagToToggle!)">
+            确定要将标签「<strong>{{ tagToToggle?.tag_name }}</strong>」设为私有吗？<br>
+            <span class="hint-text">设为私有后，该标签将不再在提示词广场显示。</span>
+            <span class="warning-text">⚠️ 注意：使用该标签的公开提示词也将同步设为私有。</span>
+          </p>
+          <p v-else>
+            确定要将标签「<strong>{{ tagToToggle?.tag_name }}</strong>」设为公开吗？<br>
+            <span class="hint-text">设为公开后，该标签将在提示词广场显示{{ userDeptName ? `（归属到${userDeptName}）` : '' }}。</span>
+          </p>
         </div>
         <div class="confirm-footer">
-          <button class="btn-secondary" @click="closeAssignDept" :disabled="isAssigning">
+          <button class="btn-secondary" @click="closeVisibilityToggle" :disabled="isToggling">
             取消
           </button>
           <button
             class="btn-primary"
-            @click="executeAssignDept"
-            :disabled="isAssigning"
+            @click="executeVisibilityToggle"
+            :disabled="isToggling"
           >
-            {{ isAssigning ? '保存中...' : '确认' }}
+            {{ isToggling ? '保存中...' : '确认' }}
           </button>
         </div>
       </div>
@@ -720,7 +677,7 @@ onMounted(() => {
   gap: 8px;
 }
 
-.dept-badge {
+.visibility-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -732,7 +689,7 @@ onMounted(() => {
   background: var(--bg-tertiary);
 }
 
-.dept-badge.all-dept {
+.visibility-badge.is-public {
   color: var(--primary);
   background: rgba(var(--primary-rgb), 0.1);
 }
@@ -941,6 +898,24 @@ onMounted(() => {
   margin-bottom: 16px;
   color: var(--text-primary);
   font-size: 14px;
+}
+
+.confirm-body .hint-text {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.confirm-body .warning-text {
+  display: block;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #d97706;
 }
 
 .delete-options {

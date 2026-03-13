@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useChatStore } from '@/stores/chat'
 import { storeToRefs } from 'pinia'
-import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, ChevronLeft, MoreHorizontal, FolderOpen, Tag, Layers, Sparkles, BookmarkCheck, Clock, Link } from 'lucide-vue-next'
+import { Plus, MessageSquare, Trash2, Pencil, ChevronRight, ChevronLeft, MoreHorizontal, FolderOpen, Tag, Layers, Sparkles, BookmarkCheck, Clock, Link, Loader2 } from 'lucide-vue-next'
 import { ref, onMounted, computed } from 'vue'
 import { getUserTagsTree } from '@/api/prompt'
 import { getPrompts } from '@/api/prompt'
@@ -11,7 +11,7 @@ import DeleteConfirmModal from '@/components/common/DeleteConfirmModal.vue'
 import RenameModal from '@/components/common/RenameModal.vue'
 
 const chatStore = useChatStore()
-const { sessions, currentSessionId, tempSession } = storeToRefs(chatStore)
+const { sessions, currentSessionId, tempSession, generatingTitleSessionIds } = storeToRefs(chatStore)
 const isTagsCollapsed = ref(true)
 const isSavedCollapsed = ref(false)
 const isHistoryCollapsed = ref(false)
@@ -313,8 +313,9 @@ const hideTooltip = () => {
                     @mouseenter="showTooltip($event, session.title || '新对话')"
                     @mouseleave="hideTooltip"
                   >
-                    <Sparkles :size="15" class="prompt-card-icon saved-icon" />
-                    <span class="text-truncate">{{ session.title || '新对话' }}</span>
+                    <Loader2 v-if="generatingTitleSessionIds.has(session.session_id)" :size="15" class="prompt-card-icon saved-icon animate-spin" />
+                    <Sparkles v-else :size="15" class="prompt-card-icon saved-icon" />
+                    <span class="text-truncate">{{ generatingTitleSessionIds.has(session.session_id) ? '正在生成标题...' : (session.title || '新对话') }}</span>
                   </div>
                   <div class="card-actions">
                     <button class="icon-btn" @click="handleRenameSession($event, session.session_id, session.title)">
@@ -359,8 +360,9 @@ const hideTooltip = () => {
                     @mouseenter="showTooltip($event, session.title || '新对话')"
                     @mouseleave="hideTooltip"
                   >
-                    <MessageSquare :size="15" class="prompt-card-icon" />
-                    <span class="text-truncate">{{ session.title || '新对话' }}</span>
+                    <Loader2 v-if="generatingTitleSessionIds.has(session.session_id)" :size="15" class="prompt-card-icon animate-spin" />
+                    <MessageSquare v-else :size="15" class="prompt-card-icon" />
+                    <span class="text-truncate">{{ generatingTitleSessionIds.has(session.session_id) ? '正在生成标题...' : (session.title || '新对话') }}</span>
                   </div>
                   <div class="card-actions">
                     <button class="icon-btn" @click="handleRenameSession($event, session.session_id, session.title)">
@@ -996,5 +998,14 @@ const hideTooltip = () => {
 .tooltip-leave-to {
   opacity: 0;
   transform: translateY(-4px) scale(0.98);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
 </style>

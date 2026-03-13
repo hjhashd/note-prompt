@@ -34,6 +34,7 @@ export const useChatStore = defineStore('chat', () => {
   const isOptimizing = ref(false)
   const pendingQueue = ref<{ msgId: number, text: string }[]>([])
   const tempSession = ref<TempSession | null>(null)
+  const generatingTitleSessionIds = ref<Set<number>>(new Set())
   
   // Computed
   const currentSession = computed(() => {
@@ -144,10 +145,39 @@ export const useChatStore = defineStore('chat', () => {
   const renameSession = async (sessionId: number, newTitle: string) => {
     try {
       await renameChatSession(sessionId, newTitle)
-      await loadSessions()
+      // Update local state instead of full reload to avoid flickering
+      const session = sessions.value.find(s => s.session_id === sessionId)
+      if (session) {
+        session.title = newTitle
+      } else {
+        await loadSessions()
+      }
     } catch (e) {
       console.error('Failed to rename session:', e)
       throw e
+    }
+  }
+
+  const updateSessionTitle = (sessionId: number, newTitle: string) => {
+    const session = sessions.value.find(s => s.session_id === sessionId)
+    if (session) {
+      session.title = newTitle
+    }
+  }
+
+  const addSession = (session: ChatSessionItem) => {
+    // Add to top of list if not exists
+    const exists = sessions.value.some(s => s.session_id === session.session_id)
+    if (!exists) {
+      sessions.value.unshift(session)
+    }
+  }
+  
+  const setSessionGeneratingTitle = (sessionId: number, isGenerating: boolean) => {
+    if (isGenerating) {
+      generatingTitleSessionIds.value.add(sessionId)
+    } else {
+      generatingTitleSessionIds.value.delete(sessionId)
     }
   }
 
@@ -191,12 +221,16 @@ export const useChatStore = defineStore('chat', () => {
     isOptimizing,
     pendingQueue,
     tempSession,
+    generatingTitleSessionIds,
     loadSessions,
     loadSessionHistory,
     switchToSession,
     openDraftSession,
     createNewSession,
     renameSession,
+    updateSessionTitle,
+    addSession,
+    setSessionGeneratingTitle,
     removeSession,
     resetToWelcome,
     updateSessionPromptId,
