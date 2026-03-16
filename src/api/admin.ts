@@ -167,7 +167,7 @@ export function getUsersList(params: {
 
 export function getUserDetail(userId: number) {
   return request<any, UserDetail>({
-    url: `/python/admin/user/${userId}`,
+    url: `/python/admin/users/${userId}`,
     method: 'get'
   })
 }
