@@ -11,7 +11,11 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  Search
+  Search,
+  Plus,
+  Trash2,
+  KeyRound,
+  Power
 } from 'lucide-vue-next'
 import {
   getSystemStats,
@@ -19,12 +23,16 @@ import {
   getTopPrompts,
   getUsersList,
   getUserDetail,
+  deleteUser,
+  updateUserStatus,
   type SystemStats,
   type TopUser,
   type TopPrompt,
   type UserListItem
 } from '@/api/admin'
 import { useToast } from '@/composables/useToast'
+import UserFormModal from '@/components/admin/UserFormModal.vue'
+import ResetPasswordModal from '@/components/admin/ResetPasswordModal.vue'
 
 const { toast } = useToast()
 
@@ -109,6 +117,13 @@ const selectedStatus = ref('')
 const selectedUserDetail = ref<any>(null)
 const showUserModal = ref(false)
 
+const showUserFormModal = ref(false)
+const editingUserId = ref<number | null>(null)
+
+const showResetPasswordModal = ref(false)
+const resetPasswordUserId = ref<number | null>(null)
+const resetPasswordUsername = ref('')
+
 const getRankClass = (rank: number) => {
   if (rank === 1) return 'first'
   if (rank === 2) return 'second'
@@ -184,7 +199,20 @@ const fetchUsersList = async () => {
   }
 }
 
+let searchTimeout: ReturnType<typeof setTimeout> | null = null
+
+const handleSearchInput = () => {
+  if (searchTimeout) {
+    clearTimeout(searchTimeout)
+  }
+  searchTimeout = setTimeout(() => {
+    usersPagination.value.page = 1
+    fetchUsersList()
+  }, 300)
+}
+
 const handleSearch = () => {
+  if (searchTimeout) clearTimeout(searchTimeout)
   usersPagination.value.page = 1
   fetchUsersList()
 }
@@ -203,6 +231,96 @@ const viewUserDetail = async (userId: number) => {
     console.error('Failed to fetch user detail:', error)
     toast('获取用户详情失败', 'error')
   }
+}
+
+const openCreateUserModal = () => {
+  editingUserId.value = null
+  showUserFormModal.value = true
+}
+
+const openEditUserModal = (userId: number) => {
+  editingUserId.value = userId
+  showUserFormModal.value = true
+}
+
+const openResetPasswordModal = (userId: number, username: string) => {
+  resetPasswordUserId.value = userId
+  resetPasswordUsername.value = username
+  showResetPasswordModal.value = true
+}
+
+const handleDeleteUser = async (userId: number, username: string) => {
+  if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) {
+    return
+  }
+  
+  try {
+    await deleteUser(userId)
+    toast('用户删除成功', 'success')
+    usersList.value = usersList.value.filter(u => u.id !== userId)
+    usersPagination.value.total -= 1
+    if (usersList.value.length === 0 && usersPagination.value.page > 1) {
+      handlePageChange(usersPagination.value.page - 1)
+    }
+  } catch (error: any) {
+    console.error('Failed to delete user:', error)
+    const message = error?.response?.data?.detail || '删除失败'
+    toast(message, 'error')
+  }
+}
+
+const handleToggleStatus = async (userId: number, currentStatus: number) => {
+  const newStatus = currentStatus === 1 ? 0 : 1
+  const action = newStatus === 1 ? '启用' : '禁用'
+  
+  const user = usersList.value.find(u => u.id === userId)
+  if (user) {
+    user._loading = true
+  }
+
+  try {
+    await updateUserStatus(userId, newStatus)
+    toast(`用户${action}成功`, 'success')
+    if (user) {
+      user.status = newStatus === 1 ? 'Active' : 'Inactive'
+    }
+  } catch (error: any) {
+    console.error('Failed to update user status:', error)
+    const message = error?.response?.data?.detail || '操作失败'
+    toast(`${message} (点击重试)`, 'error')
+  } finally {
+    if (user) {
+      user._loading = false
+    }
+  }
+}
+
+const handleUserFormSuccess = (payload?: any) => {
+  if (payload && payload.type === 'edit') {
+    const user = usersList.value.find(u => u.id === payload.id)
+    if (user) {
+      if (payload.data.realName) user.name = payload.data.realName
+      user.status = payload.data.status === 1 ? 'Active' : 'Inactive'
+      // 简单起见，如果部门或角色有复杂映射，可以通过重新获取单条数据或直接刷新列表
+      // 如果只要求无刷新，这已经处理了大部分
+    }
+    // 为了保证数据完整性，也可以选择获取单条数据然后合并
+    getUserDetail(payload.id).then(data => {
+      const u = usersList.value.find(u => u.id === payload.id)
+      if (u) {
+        u.name = data.name
+        u.department_name = data.department_name
+        u.status = data.status
+        // u.role 等如果有返回也更新
+      }
+    }).catch(() => {})
+  } else {
+    fetchUsersList()
+  }
+}
+
+const handleResetPasswordSuccess = () => {
+  toast('密码重置成功', 'success')
 }
 
 const refreshAll = async () => {
@@ -368,18 +486,31 @@ onMounted(() => {
       <section class="users-section">
         <div class="section-header">
           <h2 class="section-title">用户管理</h2>
-          <div class="search-box">
-            <Search :size="16" />
-            <input 
-              v-model="searchKeyword" 
-              type="text" 
-              placeholder="搜索用户..." 
-              @keyup.enter="handleSearch"
-            />
-            <button class="search-btn" @click="handleSearch">搜索</button>
+          <div class="header-actions">
+            <button class="add-user-btn" @click="openCreateUserModal">
+              <Plus :size="16" />
+              新增用户
+            </button>
+            <div class="search-box">
+              <Search :size="16" />
+              <input 
+                v-model="searchKeyword" 
+                type="text" 
+                placeholder="搜索用户..." 
+                @input="handleSearchInput"
+                @keyup.enter="handleSearch"
+              />
+              <button class="search-btn" @click="handleSearch">搜索</button>
+            </div>
           </div>
         </div>
         <div class="table-card">
+          <div v-if="loading.users && usersList.length" class="table-loading-overlay">
+            <div class="loading-indicator">
+              <RefreshCw :size="16" class="spinning" />
+              <span>加载中...</span>
+            </div>
+          </div>
           <div class="table-container">
             <table>
               <thead>
@@ -394,14 +525,27 @@ onMounted(() => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-if="loading.users">
-                  <td colspan="7" class="loading-cell">加载中...</td>
-                </tr>
+                <template v-if="loading.users && usersList.length === 0">
+                  <tr v-for="i in 5" :key="i" class="skeleton-row">
+                    <td><div class="skeleton-text"></div></td>
+                    <td><div class="skeleton-text"></div></td>
+                    <td><div class="skeleton-badge"></div></td>
+                    <td><div class="skeleton-text mini"></div></td>
+                    <td><div class="skeleton-status"></div></td>
+                    <td><div class="skeleton-text"></div></td>
+                    <td><div class="skeleton-actions"></div></td>
+                  </tr>
+                </template>
                 <tr v-else-if="usersList.length === 0">
                   <td colspan="7" class="empty-cell">暂无用户数据</td>
                 </tr>
                 <tr v-else v-for="user in usersList" :key="user.id">
-                  <td class="font-medium">{{ user.name }}</td>
+                  <td>
+                    <div class="user-info">
+                      <div class="user-name">{{ user.name }}</div>
+                      <div class="user-username" v-if="user.username && user.username !== user.name">@{{ user.username }}</div>
+                    </div>
+                  </td>
                   <td class="text-secondary">{{ user.department_name || '-' }}</td>
                   <td>
                     <span class="badge" :class="user.role === '高级用户' ? 'premium' : 'standard'">
@@ -418,6 +562,27 @@ onMounted(() => {
                     <div class="action-buttons">
                       <button class="action-btn" title="查看详情" @click="viewUserDetail(user.id)">
                         <Eye :size="14" />
+                      </button>
+                      <button class="action-btn" title="编辑用户" @click="openEditUserModal(user.id)">
+                        <Edit :size="14" />
+                      </button>
+                      <button class="action-btn" title="重置密码" @click="openResetPasswordModal(user.id, user.name)">
+                        <KeyRound :size="14" />
+                      </button>
+                      <button 
+                        class="action-btn status-btn" 
+                        :class="user.status === 'Active' ? 'danger' : 'success'"
+                        :title="user.status === 'Active' ? '禁用用户' : '启用用户'"
+                        :aria-label="user.status === 'Active' ? '禁用该用户' : '启用该用户'"
+                        :disabled="user._loading"
+                        @click="handleToggleStatus(user.id, user.status === 'Active' ? 1 : 0)"
+                      >
+                        <RefreshCw v-if="user._loading" :size="14" class="spinning" />
+                        <Power v-else :size="14" />
+                        <span class="status-text">{{ user.status === 'Active' ? '禁用' : '启用' }}</span>
+                      </button>
+                      <button class="action-btn danger" title="删除用户" @click="handleDeleteUser(user.id, user.name)">
+                        <Trash2 :size="14" />
                       </button>
                     </div>
                   </td>
@@ -504,6 +669,21 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <!-- User Form Modal -->
+    <UserFormModal
+      v-model:visible="showUserFormModal"
+      :user-id="editingUserId"
+      @success="handleUserFormSuccess"
+    />
+
+    <!-- Reset Password Modal -->
+    <ResetPasswordModal
+      v-model:visible="showResetPasswordModal"
+      :user-id="resetPasswordUserId"
+      :username="resetPasswordUsername"
+      @success="handleResetPasswordSuccess"
+    />
   </div>
 </template>
 
@@ -661,6 +841,31 @@ onMounted(() => {
   font-size: 20px;
   font-weight: 600;
   color: var(--gray-900);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.add-user-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-user-btn:hover {
+  background: var(--primary-600);
 }
 
 .search-box {
@@ -918,6 +1123,7 @@ onMounted(() => {
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-subtle);
   overflow: hidden;
+  position: relative;
 }
 
 .table-container {
@@ -951,11 +1157,83 @@ tr:last-child td {
   border-bottom: none;
 }
 
-.loading-cell,
 .empty-cell {
   text-align: center;
   color: var(--gray-500);
   padding: 40px !important;
+}
+
+/* Skeleton Loading Styles */
+.skeleton-row td {
+  padding: 16px 24px;
+}
+
+.skeleton-text,
+.skeleton-badge,
+.skeleton-status,
+.skeleton-actions {
+  background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-text {
+  height: 16px;
+  width: 80%;
+}
+
+.skeleton-text.mini {
+  width: 40%;
+}
+
+.skeleton-badge {
+  height: 24px;
+  width: 60px;
+  border-radius: 12px;
+}
+
+.skeleton-status {
+  height: 16px;
+  width: 50px;
+}
+
+.skeleton-actions {
+  height: 32px;
+  width: 140px;
+}
+
+.table-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--gray-700);
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .font-medium { font-weight: 500; }
@@ -995,23 +1273,54 @@ tr:last-child td {
 }
 
 .action-btn {
-  width: 28px;
-  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
   color: var(--gray-500);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.action-btn:hover {
-  background: var(--bg-primary);
-  color: var(--primary-600);
-  border-color: var(--primary-light);
+.action-btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  color: var(--primary);
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.danger {
+  color: var(--danger);
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.action-btn.success {
+  color: var(--success);
+}
+
+.action-btn.success:hover:not(:disabled) {
+  background: #ecfdf5;
+}
+
+.action-btn.status-btn {
+  width: auto;
+  padding: 0 8px;
+}
+
+.status-text {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* Pagination */
@@ -1162,5 +1471,23 @@ tr:last-child td {
   .detail-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* 用户信息样式 */
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.user-username {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: monospace;
 }
 </style>

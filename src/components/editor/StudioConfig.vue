@@ -1156,8 +1156,15 @@ const runTest = async () => {
 :deep(.markdown-body pre) {
     background-color: #f6f8fa;
     border-radius: 6px;
-    overflow-x: auto;
+    overflow-x: hidden;
     max-width: 100%;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+::deep(.markdown-body pre code) {
+    white-space: pre-wrap !important;
+    word-break: break-all;
 }
 
 .scroll-bottom-btn {

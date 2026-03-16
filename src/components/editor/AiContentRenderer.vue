@@ -235,8 +235,15 @@ const htmlAnswer = computed(() => {
   border-radius: 6px;
   padding: 16px;
   margin: 0; /* Reset margin as it's now in wrapper */
-  overflow-x: auto;
+  overflow-x: hidden;
   max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+:deep(.markdown-body pre code) {
+  white-space: pre-wrap !important;
+  word-break: break-all;
 }
 
 /* Code Block Enhancements */

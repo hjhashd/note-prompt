@@ -137,14 +137,6 @@ const shareSelectedPrompts = async (deptId?: number): Promise<number[]> => {
     toast(`成功分享 ${idsToShare.length} 个提示词`, 'success')
     emit('promptsShared', idsToShare)
     
-    // 刷新列表（因为状态可能变了，或者移动到了公共区域）
-    // 如果是“私有提示词”列表，分享后应该还在列表里，但状态变了？
-    // 或者如果分享意味着移动到公共，那可能就不在私有列表了？
-    // 根据需求： "允许用户自由选择私有提示词上传到提示词广场"
-    // 通常上传后，它就变成了公共的，可能不再显示在"私有提示词"里，或者显示但状态不同。
-    // 为了安全起见，刷新列表。
-    fetchPromptsList()
-    
     return idsToShare
   } catch (error: any) {
     console.error(`Failed to share prompts:`, error)
@@ -442,8 +434,6 @@ const executeSharePrompt = async () => {
     await batchSharePrompts([promptToShare.value.id], deptId)
     toast('分享成功', 'success')
     emit('promptsShared', [promptToShare.value.id])
-    // 刷新列表
-    fetchPromptsList()
   } catch (error: any) {
     toast(error?.response?.data?.message || '分享失败', 'error')
   } finally {
@@ -501,7 +491,10 @@ const fetchPromptsList = async (append = false) => {
   if (append && loading.value) return
 
   const currentFetchId = ++fetchId.value
-  loading.value = true
+  
+  if (!append) {
+    loading.value = true
+  }
   
   try {
     const queryKey = getQueryKey()
@@ -549,7 +542,8 @@ defineExpose({
   deleteSelectedPrompts,
   shareSelectedPrompts,
   fetchPromptsList,
-  setActiveFilter
+  setActiveFilter,
+  prompts
 })
 
 // Watchers for refetching
@@ -1157,6 +1151,13 @@ onBeforeUnmount(() => {
       <div class="empty-desc">试试换个关键词，或清空搜索条件</div>
     </div>
     
+    <div v-if="loading && prompts.length" class="grid-loading-overlay">
+      <div class="grid-loading-indicator">
+        <span class="grid-loading-dot"></span>
+        <span>加载中...</span>
+      </div>
+    </div>
+    
     <div ref="loadMoreTrigger" class="loading-state" v-show="prompts.length > 0 || loading">
       <div v-if="loading" class="loading-spinner">加载中...</div>
       <div v-else-if="prompts.length >= total" class="no-more-data">已经到底啦</div>
@@ -1337,6 +1338,7 @@ onBeforeUnmount(() => {
   /* height: 100%; */ /* Removed for standard scrolling */
   min-height: 0;
   /* padding-bottom: 40px; */ /* Removed to prevent overflow in fixed height layout */
+  position: relative;
 }
 
 /* Toolbar */
@@ -2049,6 +2051,43 @@ onBeforeUnmount(() => {
   margin-top: 6px;
   font-size: 13px;
   color: var(--gray-500);
+}
+
+.grid-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.grid-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.grid-loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+  animation: dotPulse 1s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 @keyframes fadeUp {

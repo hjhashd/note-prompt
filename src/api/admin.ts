@@ -36,6 +36,7 @@ export interface TopPrompt {
 export interface UserListItem {
   id: number
   name: string
+  username?: string
   email?: string
   role: string
   status: string
@@ -65,6 +66,50 @@ export interface UserDetail {
   total_views: number
   total_copies: number
   total_favorites: number
+}
+
+export interface UserInfo {
+  id: number
+  username: string
+  realName: string
+  departmentId?: number
+  departmentName?: string
+  status: number
+  isDeleted: number
+  roles: RoleInfo[]
+  lastLoginAt?: string
+  createdAt: string
+}
+
+export interface CreateUserRequest {
+  username: string
+  realName: string
+  password: string
+  departmentId?: number
+  status: number
+  roleIds: number[]
+}
+
+export interface UpdateUserRequest {
+  realName?: string
+  departmentId?: number
+  status?: number
+  roleIds?: number[]
+}
+
+export interface ResetPasswordRequest {
+  newPassword: string
+}
+
+export interface RoleInfo {
+  id: number
+  roleKey: string
+  roleName: string
+}
+
+export interface DepartmentInfo {
+  id: number
+  deptName: string
 }
 
 export interface DailyStat {
@@ -132,5 +177,65 @@ export function getInteractionStats(days: number = 7) {
     url: '/python/admin/interaction-stats',
     method: 'get',
     params: { days }
+  })
+}
+
+export function createUser(data: CreateUserRequest) {
+  return request<any, { id: number; username: string }>({
+    url: '/python/admin/users',
+    method: 'post',
+    data
+  })
+}
+
+export function getUserById(userId: number) {
+  return request<any, UserInfo>({
+    url: `/python/admin/users/${userId}`,
+    method: 'get'
+  })
+}
+
+export function updateUser(userId: number, data: UpdateUserRequest) {
+  return request<any, void>({
+    url: `/python/admin/users/${userId}`,
+    method: 'put',
+    data
+  })
+}
+
+export function deleteUser(userId: number) {
+  return request<any, void>({
+    url: `/python/admin/users/${userId}`,
+    method: 'delete'
+  })
+}
+
+export function updateUserStatus(userId: number, status: number) {
+  return request<any, void>({
+    url: `/python/admin/users/${userId}/status`,
+    method: 'patch',
+    data: { status }
+  })
+}
+
+export function resetPassword(userId: number, newPassword: string) {
+  return request<any, void>({
+    url: `/python/admin/users/${userId}/reset-password`,
+    method: 'post',
+    data: { newPassword }
+  })
+}
+
+export function getDepartments() {
+  return request<any, DepartmentInfo[]>({
+    url: '/python/admin/departments',
+    method: 'get'
+  })
+}
+
+export function getRoles() {
+  return request<any, RoleInfo[]>({
+    url: '/python/admin/roles',
+    method: 'get'
   })
 }

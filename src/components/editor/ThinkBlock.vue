@@ -168,14 +168,18 @@ const htmlContent = computed(() => {
   background-color: #f6f8fa;
   padding: 16px;
   border-radius: 6px;
-  overflow: auto;
+  overflow: hidden;
   margin-bottom: 10px;
   max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 :deep(.markdown-body pre code) {
   background-color: transparent;
   padding: 0;
   font-size: 100%;
+  white-space: pre-wrap !important;
+  word-break: break-all;
 }
 </style>

@@ -78,6 +78,7 @@ const batchTagSelected = ref<number | null>(null)
 const userTags = ref<any[]>([])
 const loadingTags = ref(false)
 const batchTagMode = ref<'add' | 'remove'>('add') // 'add' 或 'remove'
+const isBatchProcessing = ref(false)
 
 const createPrompt = () => {
   chatStore.openDraftSession()
@@ -221,6 +222,7 @@ const executeBatchAddTag = async () => {
   const tag = userTags.value.find(t => t.id === batchTagSelected.value)
   if (!tag) return
 
+  isBatchProcessing.value = true
   try {
     const promptIds = Array.from(selectedPrompts.value)
     let successCount = 0
@@ -233,12 +235,21 @@ const executeBatchAddTag = async () => {
       } catch (error: any) {
         if (error?.response?.data?.message?.includes('已关联')) {
           skipCount++
+        } else {
+          throw error
         }
       }
     }
 
     if (successCount > 0) {
       toast(`成功为 ${successCount} 个提示词添加标签「${tag.tag_name}」`, 'success')
+      if (promptListRef.value) {
+        promptListRef.value.prompts.forEach((p: any) => {
+          if (promptIds.includes(p.id) && !p.tags.includes(tag.tag_name)) {
+            p.tags.push(tag.tag_name)
+          }
+        })
+      }
     }
     if (skipCount > 0) {
       toast(`${skipCount} 个提示词已拥有该标签`, 'info')
@@ -250,13 +261,10 @@ const executeBatchAddTag = async () => {
     batchTagMode.value = 'add'
     isBatchTagMode.value = false
     selectedPrompts.value.clear()
-
-    // 刷新列表
-    if (promptListRef.value) {
-      promptListRef.value.fetchPromptsList()
-    }
   } catch (error: any) {
     toast(error?.response?.data?.message || '批量添加标签失败', 'error')
+  } finally {
+    isBatchProcessing.value = false
   }
 }
 
@@ -267,6 +275,7 @@ const executeBatchRemoveTag = async () => {
   const tag = userTags.value.find(t => t.id === batchTagSelected.value)
   if (!tag) return
 
+  isBatchProcessing.value = true
   try {
     const promptIds = Array.from(selectedPrompts.value)
     let successCount = 0
@@ -279,12 +288,21 @@ const executeBatchRemoveTag = async () => {
       } catch (error: any) {
         if (error?.response?.data?.message?.includes('未关联')) {
           skipCount++
+        } else {
+          throw error
         }
       }
     }
 
     if (successCount > 0) {
       toast(`成功从 ${successCount} 个提示词移除标签「${tag.tag_name}」`, 'success')
+      if (promptListRef.value) {
+        promptListRef.value.prompts.forEach((p: any) => {
+          if (promptIds.includes(p.id)) {
+            p.tags = p.tags.filter((t: string) => t !== tag.tag_name)
+          }
+        })
+      }
     }
     if (skipCount > 0) {
       toast(`${skipCount} 个提示词未拥有该标签`, 'info')
@@ -296,13 +314,10 @@ const executeBatchRemoveTag = async () => {
     batchTagMode.value = 'add'
     isBatchTagMode.value = false
     selectedPrompts.value.clear()
-
-    // 刷新列表
-    if (promptListRef.value) {
-      promptListRef.value.fetchPromptsList()
-    }
   } catch (error: any) {
     toast(error?.response?.data?.message || '批量删除标签失败', 'error')
+  } finally {
+    isBatchProcessing.value = false
   }
 }
 
@@ -414,16 +429,23 @@ const onTagDeleted = () => {
   }
 }
 
+const isDeleting = ref(false)
 const executeDelete = async () => {
   if (!promptListRef.value) return
   
-  await promptListRef.value.deleteSelectedPrompts(deleteWithSession.value)
-  showDeleteConfirm.value = false
-  deleteWithSession.value = false
-  isDeleteMode.value = false
+  isDeleting.value = true
+  try {
+    await promptListRef.value.deleteSelectedPrompts(deleteWithSession.value)
+    showDeleteConfirm.value = false
+    deleteWithSession.value = false
+    isDeleteMode.value = false
+  } finally {
+    isDeleting.value = false
+  }
 }
 
 // 执行分享
+const isSharing = ref(false)
 const executeShare = async () => {
   if (!promptListRef.value) return
 
@@ -436,9 +458,14 @@ const executeShare = async () => {
   // 计算要分享的部门ID
   const deptId = shareScope.value === 'department' ? selectedDepartment.value : undefined
 
-  await promptListRef.value.shareSelectedPrompts(deptId)
-  showShareConfirm.value = false
-  isShareMode.value = false
+  isSharing.value = true
+  try {
+    await promptListRef.value.shareSelectedPrompts(deptId)
+    showShareConfirm.value = false
+    isShareMode.value = false
+  } finally {
+    isSharing.value = false
+  }
 }
 
 // 取消删除
@@ -661,8 +688,10 @@ onBeforeRouteLeave(() => {
           </label>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="cancelDelete">取消</button>
-          <button class="btn-danger" @click="executeDelete">确认删除</button>
+          <button class="btn-secondary" @click="cancelDelete" :disabled="isDeleting">取消</button>
+          <button class="btn-danger" @click="executeDelete" :disabled="isDeleting">
+            {{ isDeleting ? '删除中...' : '确认删除' }}
+          </button>
         </div>
       </div>
     </div>
@@ -719,13 +748,13 @@ onBeforeRouteLeave(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="cancelShare">取消</button>
-          <button
-            class="btn-primary"
+          <button class="btn-secondary" @click="cancelShare" :disabled="isSharing">取消</button>
+          <button 
+            class="btn-primary" 
             @click="executeShare"
-            :disabled="shareScope === 'department' && !selectedDepartment"
+            :disabled="isSharing || (shareScope === 'department' && !selectedDepartment)"
           >
-            确认分享
+            {{ isSharing ? '分享中...' : '确认分享' }}
           </button>
         </div>
       </div>
@@ -794,22 +823,22 @@ onBeforeRouteLeave(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="cancelBatchTag">取消</button>
+          <button class="btn-secondary" @click="cancelBatchTag" :disabled="isBatchProcessing">取消</button>
           <button
             v-if="batchTagMode === 'add'"
             class="btn-primary"
             @click="executeBatchAddTag"
-            :disabled="!batchTagSelected || loadingTags"
+            :disabled="!batchTagSelected || loadingTags || isBatchProcessing"
           >
-            确认添加
+            {{ isBatchProcessing ? '添加中...' : '确认添加' }}
           </button>
           <button
             v-else
             class="btn-danger"
             @click="executeBatchRemoveTag"
-            :disabled="!batchTagSelected || loadingTags"
+            :disabled="!batchTagSelected || loadingTags || isBatchProcessing"
           >
-            确认删除
+            {{ isBatchProcessing ? '删除中...' : '确认删除' }}
           </button>
         </div>
       </div>

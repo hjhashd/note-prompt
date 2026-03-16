@@ -170,7 +170,7 @@ const handleDeletePrompt = async (promptId: number) => {
 }
 
 const editPrompt = (id: number) => {
-  router.push(`/prompt/edit/${id}`)
+  router.push({ path: '/studio', query: { promptId: id } })
 }
 
 const goToPage = (page: number) => {
