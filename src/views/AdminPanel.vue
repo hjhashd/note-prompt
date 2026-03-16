@@ -310,7 +310,7 @@ const handleUserFormSuccess = (payload?: any) => {
       if (u) {
         u.name = data.name
         u.department_name = data.department_name
-        u.status = data.status
+        u.status = data.status === 1 ? 'Active' : 'Inactive'
         // u.role 等如果有返回也更新
       }
     }).catch(() => {})
