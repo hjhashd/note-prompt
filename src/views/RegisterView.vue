@@ -261,7 +261,19 @@ const handleRegister = async () => {
       errorMsg.value = data.message || '注册失败，请稍后重试'
     }
   } catch (error: any) {
-    errorMsg.value = error.message || '注册失败，请稍后重试'
+    // 根据错误类型显示友好的提示信息
+    const status = error.response?.status
+    if (status === 400) {
+      errorMsg.value = '用户名已存在或输入信息有误'
+    } else if (status === 401) {
+      errorMsg.value = '登录已过期，请重新登录'
+    } else if (status === 500) {
+      errorMsg.value = '服务器繁忙，请稍后再试'
+    } else if (!navigator.onLine) {
+      errorMsg.value = '网络连接失败，请检查网络设置'
+    } else {
+      errorMsg.value = '注册失败，请稍后重试'
+    }
   } finally {
     loading.value = false
   }

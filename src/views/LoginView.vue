@@ -244,7 +244,19 @@ const handleLogin = async () => {
     const redirectPath = route.query.redirect as string || '/'
     router.push(redirectPath)
   } catch (error: any) {
-    errorMsg.value = error.message || '登录失败，请检查用户名和密码'
+    // 根据错误类型显示友好的提示信息
+    const status = error.response?.status
+    if (status === 400) {
+      errorMsg.value = '用户名或密码错误，请重新输入'
+    } else if (status === 401) {
+      errorMsg.value = '登录已过期，请重新登录'
+    } else if (status === 500) {
+      errorMsg.value = '服务器繁忙，请稍后再试'
+    } else if (!navigator.onLine) {
+      errorMsg.value = '网络连接失败，请检查网络设置'
+    } else {
+      errorMsg.value = '登录失败，请检查用户名和密码'
+    }
   } finally {
     loading.value = false
   }

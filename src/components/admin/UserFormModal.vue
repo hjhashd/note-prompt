@@ -41,6 +41,13 @@ const formData = ref({
   roleIds: [] as number[]
 })
 
+const selectedRoleId = computed<number | null>({
+  get: () => formData.value.roleIds[0] ?? null,
+  set: (value) => {
+    formData.value.roleIds = value ? [value] : []
+  }
+})
+
 const errors = ref<Record<string, string>>({})
 
 const resetForm = () => {
@@ -57,13 +64,19 @@ const resetForm = () => {
 
 const validateForm = () => {
   errors.value = {}
-  
-  if (!formData.value.username) {
+
+  const username = formData.value.username.trim()
+  const password = formData.value.password
+  const isPhoneUsername = /^1\d{10}$/.test(username)
+
+  if (!username) {
     errors.value.username = '请输入用户名'
-  } else if (formData.value.username.length < 4 || formData.value.username.length > 20) {
-    errors.value.username = '用户名长度为4-20位'
-  } else if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(formData.value.username)) {
-    errors.value.username = '用户名必须以字母开头，只能包含字母、数字和下划线'
+  } else if (!isPhoneUsername) {
+    if (username.length < 4 || username.length > 20) {
+      errors.value.username = '用户名长度为4-20位'
+    } else if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(username)) {
+      errors.value.username = '用户名必须以字母开头，只能包含字母、数字和下划线'
+    }
   }
   
   if (!formData.value.realName) {
@@ -73,11 +86,16 @@ const validateForm = () => {
   }
   
   if (!isEdit.value) {
-    if (!formData.value.password) {
+    if (!password) {
       errors.value.password = '请输入密码'
-    } else if (formData.value.password.length < 6 || formData.value.password.length > 20) {
+    } else if (isPhoneUsername) {
+      const lastSix = username.slice(-6)
+      if (password !== lastSix) {
+        errors.value.password = '手机号用户密码需为手机号后六位'
+      }
+    } else if (password.length < 6 || password.length > 20) {
       errors.value.password = '密码长度为6-20位'
-    } else if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(formData.value.password)) {
+    } else if (!/(?=.*[a-zA-Z])(?=.*\d)/.test(password)) {
       errors.value.password = '密码需包含字母和数字'
     }
   }
@@ -104,13 +122,14 @@ const fetchUserData = async () => {
   loading.value = true
   try {
     const user = await getUserById(props.userId)
+    const primaryRoleId = user.roles[0]?.id
     formData.value = {
       username: user.username,
       realName: user.realName,
       password: '',
       departmentId: user.departmentId,
       status: user.status,
-      roleIds: user.roles.map(r => r.id)
+      roleIds: primaryRoleId ? [primaryRoleId] : []
     }
   } catch (error) {
     console.error('Failed to fetch user:', error)
@@ -198,7 +217,7 @@ watch(() => props.visible, (val) => {
               class="form-input"
               :class="{ 'error': errors.username }"
               :disabled="isEdit"
-              placeholder="4-20位，字母开头"
+              placeholder="4-20位字母开头或手机号"
             />
             <span v-if="errors.username" class="error-text">{{ errors.username }}</span>
           </div>
@@ -226,7 +245,7 @@ watch(() => props.visible, (val) => {
               type="password"
               class="form-input"
               :class="{ 'error': errors.password }"
-              placeholder="6-20位，需包含字母和数字"
+              placeholder="6-20位或手机号后六位"
             />
             <span v-if="errors.password" class="error-text">{{ errors.password }}</span>
           </div>
@@ -254,9 +273,10 @@ watch(() => props.visible, (val) => {
             <div class="checkbox-group">
               <label v-for="role in roles" :key="role.id" class="checkbox-item">
                 <input
-                  type="checkbox"
+                  type="radio"
                   :value="role.id"
-                  v-model="formData.roleIds"
+                  v-model="selectedRoleId"
+                  name="user-role"
                 />
                 <span>{{ role.roleName }}</span>
               </label>

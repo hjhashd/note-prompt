@@ -512,7 +512,19 @@ const handleSave = async () => {
     })
   } catch (error: any) {
     console.error('Failed to save prompt:', error)
-    toast(error.message || '保存失败', 'error')
+    // 根据错误类型显示友好的提示信息
+    const status = error.response?.status
+    let errorMsg = '保存失败，请稍后重试'
+    if (status === 400) {
+      errorMsg = '保存内容格式有误，请检查后重试'
+    } else if (status === 401 || status === 403) {
+      errorMsg = '登录已过期，请重新登录'
+    } else if (status === 500) {
+      errorMsg = '服务器繁忙，请稍后再试'
+    } else if (!navigator.onLine) {
+      errorMsg = '网络连接失败，请检查网络设置'
+    }
+    toast(errorMsg, 'error')
   } finally {
     isSaving.value = false
   }

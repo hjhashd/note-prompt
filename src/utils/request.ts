@@ -62,7 +62,18 @@ service.interceptors.response.use(
         window.location.href = '/login'
       }, 1500)
     } else {
-      toast(error.message || '网络错误', 'error')
+      // 根据错误类型显示友好的提示信息
+      let errorMsg = '网络错误，请稍后重试'
+      if (status === 400) {
+        errorMsg = '请求参数有误，请检查后重试'
+      } else if (status === 404) {
+        errorMsg = '请求的资源不存在'
+      } else if (status === 500) {
+        errorMsg = '服务器繁忙，请稍后再试'
+      } else if (!navigator.onLine) {
+        errorMsg = '网络连接失败，请检查网络设置'
+      }
+      toast(errorMsg, 'error')
     }
     return Promise.reject(error)
   }

@@ -295,27 +295,13 @@ const handleToggleStatus = async (userId: number, currentStatus: number) => {
   }
 }
 
-const handleUserFormSuccess = (payload?: any) => {
-  if (payload && payload.type === 'edit') {
-    const user = usersList.value.find(u => u.id === payload.id)
-    if (user) {
-      if (payload.data.realName) user.name = payload.data.realName
-      user.status = payload.data.status === 1 ? 'Active' : 'Inactive'
-      // 简单起见，如果部门或角色有复杂映射，可以通过重新获取单条数据或直接刷新列表
-      // 如果只要求无刷新，这已经处理了大部分
+const handleUserFormSuccess = async (payload?: any) => {
+  await fetchUsersList()
+  if (payload?.type === 'edit' && payload.id && selectedUserDetail.value?.id === payload.id) {
+    try {
+      selectedUserDetail.value = await getUserDetail(payload.id)
+    } catch {
     }
-    // 为了保证数据完整性，也可以选择获取单条数据然后合并
-    getUserDetail(payload.id).then(data => {
-      const u = usersList.value.find(u => u.id === payload.id)
-      if (u) {
-        u.name = data.name
-        u.department_name = data.department_name
-        u.status = data.status === 1 ? 'Active' : 'Inactive'
-        // u.role 等如果有返回也更新
-      }
-    }).catch(() => {})
-  } else {
-    fetchUsersList()
   }
 }
 
